@@ -44,6 +44,7 @@ class HandleInertiaRequests extends Middleware
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $request->user(),
+                'isAdmin' => $request->user() ? $request->user()->is_admin : false,
                 'hasPlatformConnected' => $request->user()
                     ? $request->user()->connectedPlatforms()
                         ->where('is_active', true)

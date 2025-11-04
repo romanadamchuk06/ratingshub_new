@@ -41,4 +41,21 @@ Route::middleware(['auth', 'verified'])->prefix('platforms')->name('platforms.')
     Route::delete('/{platform}', [PlatformController::class, 'disconnect'])->name('disconnect');
 });
 
+// Admin Routes
+Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', function () {
+        return Inertia::render('Admin/Dashboard', [
+            'stats' => [
+                'totalUsers' => \App\Models\User::count(),
+                'totalPlatforms' => \App\Models\ConnectedPlatform::count(),
+                'totalAdmins' => \App\Models\User::where('is_admin', true)->count(),
+            ],
+        ]);
+    })->name('dashboard');
+
+    // User Management
+    Route::resource('users', \App\Http\Controllers\Admin\UserController::class);
+    Route::post('users/{user}/toggle-admin', [\App\Http\Controllers\Admin\UserController::class, 'toggleAdmin'])->name('users.toggle-admin');
+});
+
 require __DIR__.'/settings.php';
