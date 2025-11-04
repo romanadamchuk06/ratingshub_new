@@ -23,5 +23,25 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->respond(function (\Illuminate\Http\Response $response) {
+            if ($response->getStatusCode() === 404) {
+                return \Inertia\Inertia::render('errors/404')
+                    ->toResponse(request())
+                    ->setStatusCode(404);
+            }
+
+            if ($response->getStatusCode() === 500) {
+                return \Inertia\Inertia::render('errors/500')
+                    ->toResponse(request())
+                    ->setStatusCode(500);
+            }
+
+            if ($response->getStatusCode() === 503) {
+                return \Inertia\Inertia::render('errors/503')
+                    ->toResponse(request())
+                    ->setStatusCode(503);
+            }
+
+            return $response;
+        });
     })->create();

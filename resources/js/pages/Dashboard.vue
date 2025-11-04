@@ -1,22 +1,21 @@
 <script setup>
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Head } from '@inertiajs/vue3';
-import { ref, onMounted } from 'vue';
+import { Head, usePage } from '@inertiajs/vue3';
+import { ref, onMounted, computed } from 'vue';
 import ConnectPlatformModal from '../components/ConnectPlatformModal.vue';
 import StatsCard from '../components/StatsCard.vue';
 import EmptyState from '../components/EmptyState.vue';
 import { Star, TrendingUp, MessageSquare, Award, Link2 } from 'lucide-vue-next';
 
-const props = defineProps({
-    hasGoogleConnected: Boolean,
-});
+const page = usePage();
+const hasPlatformConnected = computed(() => page.props.auth.hasPlatformConnected);
 
 const showModal = ref(false);
 
 // Show modal on mount if no platforms connected and not dismissed
 onMounted(() => {
     const dismissed = sessionStorage.getItem('platformModalDismissed');
-    if (!props.hasGoogleConnected && !dismissed) {
+    if (!hasPlatformConnected.value && !dismissed) {
         showModal.value = true;
     }
 });
@@ -47,19 +46,19 @@ const closeModal = () => {
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatsCard
                     title="Gesamtbewertungen"
-                    :value="hasGoogleConnected ? '0' : '-'"
+                    :value="hasPlatformConnected ? '0' : '-'"
                     :icon="Star"
                     :loading="false"
                 />
                 <StatsCard
                     title="Durchschnitt"
-                    :value="hasGoogleConnected ? '-' : '-'"
+                    :value="hasPlatformConnected ? '-' : '-'"
                     :icon="Award"
                     :loading="false"
                 />
                 <StatsCard
                     title="Neue diese Woche"
-                    :value="hasGoogleConnected ? '0' : '-'"
+                    :value="hasPlatformConnected ? '0' : '-'"
                     :icon="TrendingUp"
                     trend="up"
                     trendValue="+0%"
@@ -67,7 +66,7 @@ const closeModal = () => {
                 />
                 <StatsCard
                     title="Zu beantworten"
-                    :value="hasGoogleConnected ? '0' : '-'"
+                    :value="hasPlatformConnected ? '0' : '-'"
                     :icon="MessageSquare"
                     :loading="false"
                 />
@@ -80,7 +79,7 @@ const closeModal = () => {
                 </div>
                 <div class="p-6">
                     <EmptyState
-                        v-if="!hasGoogleConnected"
+                        v-if="!hasPlatformConnected"
                         :icon="Link2"
                         title="Keine Plattform verbunden"
                         description="Verbinde zuerst eine Plattform wie Google My Business, um deine Bewertungen zu sehen."

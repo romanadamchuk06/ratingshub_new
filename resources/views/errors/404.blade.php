@@ -3,88 +3,74 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>404 - Seite nicht gefunden</title>
+    <title>404 - Seite nicht gefunden | RatingsHub</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @keyframes bounce {
-            0%, 100% {
-                transform: translateY(-25%);
-                animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
-            }
-            50% {
-                transform: translateY(0);
-                animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
-            }
+    <script>
+        // Dark mode detection
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark')
+        } else {
+            document.documentElement.classList.remove('dark')
         }
-        .animate-bounce {
-            animation: bounce 1s infinite;
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         }
     </style>
 </head>
-<body>
-    <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4">
-        <div class="w-full max-w-2xl text-center">
-            <div class="relative mb-8">
-                <div class="animate-bounce text-9xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-                    404
-                </div>
-                <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-6xl">
-                    🤔
-                </div>
+<body class="bg-white dark:bg-gray-950">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="w-full max-w-2xl">
+            <!-- Logo -->
+            <div class="mb-8 text-center">
+                <svg width="125" height="32" viewBox="0 0 125 32" fill="none" xmlns="http://www.w3.org/2000/svg" class="mx-auto h-8 w-auto">
+                    <path d="M9.009 23L5.775 17.288H4.389V23H1.449V8.342H6.951C8.085 8.342 9.051 8.545 9.849 8.951C10.647 9.343 11.242 9.882 11.634 10.568C12.04 11.24 12.243 11.996 12.243 12.836C12.243 13.802 11.963 14.677 11.403 15.461C10.843 16.231 10.01 16.763 8.904 17.057L12.411 23H9.009ZM4.389 15.083H6.846C7.644 15.083 8.239 14.894 8.631 14.516C9.023 14.124 9.219 13.585 9.219 12.899C9.219 12.227 9.023 11.709 8.631 11.345C8.239 10.967 7.644 10.778 6.846 10.778H4.389V15.083ZM14.1461 17.141C14.1461 15.965 14.3771 14.922 14.8391 14.012C15.3151 13.102 15.9521 12.402 16.7501 11.912C17.5621 11.422 18.4651 11.177 19.4591 11.177C20.3271 11.177 21.0831 11.352 21.7271 11.702C22.3851 12.052 22.9101 12.493 23.3021 13.025V11.366H26.2631V23H23.3021V21.299C22.9241 21.845 22.3991 22.3 21.7271 22.664C21.0691 23.014 20.3061 23.189 19.4381 23.189C18.4581 23.189 17.5621 22.937 16.7501 22.433C15.9521 21.929 15.3151 21.222 14.8391 20.312C14.3771 19.388 14.1461 18.331 14.1461 17.141ZM23.3021 17.183C23.3021 16.469 23.1621 15.86 22.8821 15.356C22.6021 14.838 22.2241 14.446 21.7481 14.18C21.2721 13.9 20.7611 13.76 20.2151 13.76C19.6691 13.76 19.1651 13.893 18.7031 14.159C18.2411 14.425 17.8631 14.817 17.5691 15.335C17.2891 15.839 17.1491 16.441 17.1491 17.141C17.1491 17.841 17.2891 18.457 17.5691 18.989C17.8631 19.507 18.2411 19.906 18.7031 20.186C19.1791 20.466 19.6831 20.606 20.2151 20.606C20.7611 20.606 21.2721 20.473 21.7481 20.207C22.2241 19.927 22.6021 19.535 22.8821 19.031C23.1621 18.513 23.3021 17.897 23.3021 17.183ZM32.5575 13.781V19.409C32.5575 19.801 32.6485 20.088 32.8305 20.27C33.0265 20.438 33.3485 20.522 33.7965 20.522H35.1615V23H33.3135C30.8355 23 29.5965 21.796 29.5965 19.388V13.781H28.2105V11.366H29.5965V8.489H32.5575V11.366H35.1615V13.781H32.5575ZM40.3421 11.366V23H37.4021V11.366H40.3421ZM49.814 11.198C51.2 11.198 52.32 11.639 53.174 12.521C54.028 13.389 54.455 14.607 54.455 16.175V23H51.515V16.574C51.515 15.65 51.284 14.943 50.822 14.453C50.36 13.949 49.73 13.697 48.932 13.697C48.12 13.697 47.476 13.949 47 14.453C46.538 14.943 46.307 15.65 46.307 16.574V23H43.367V11.366H46.307V12.815C46.699 12.311 47.196 11.919 47.798 11.639C48.414 11.345 49.086 11.198 49.814 11.198ZM61.8078 11.177C62.6758 11.177 63.4388 11.352 64.0968 11.702C64.7548 12.038 65.2728 12.479 65.6508 13.025V11.366H68.6118V23.084C68.6118 24.162 68.3948 25.121 67.9608 25.961C67.5268 26.815 66.8758 27.487 66.0078 27.977C65.1398 28.481 64.0898 28.733 62.8578 28.733C61.2058 28.733 59.8478 28.348 58.7838 27.578C57.7338 26.808 57.1388 25.758 56.9988 24.428H59.9178C60.0718 24.96 60.4008 25.38 60.9048 25.688C61.4228 26.01 62.0458 26.171 62.7738 26.171C63.6278 26.171 64.3208 25.912 64.8528 25.394C65.3848 24.89 65.6508 24.12 65.6508 23.084V21.278C65.2728 21.824 64.7478 22.279 64.0758 22.643C63.4178 23.007 62.6618 23.189 61.8078 23.189C60.8278 23.189 59.9318 22.937 59.1198 22.433C58.3078 21.929 57.6638 21.222 57.1878 20.312C56.7258 19.388 56.4948 18.331 56.4948 17.141C56.4948 15.965 56.7258 14.922 57.1878 14.012C57.6638 13.102 58.3008 12.402 59.0988 11.912C59.9108 11.422 60.8138 11.177 61.8078 11.177ZM65.6508 17.183C65.6508 16.469 65.5108 15.86 65.2308 15.356C64.9508 14.838 64.5728 14.446 64.0968 14.18C63.6208 13.9 63.1098 13.76 62.5638 13.76C62.0178 13.76 61.5138 13.893 61.0518 14.159C60.5898 14.425 60.2118 14.817 59.9178 15.335C59.6378 15.839 59.4978 16.441 59.4978 17.141C59.4978 17.841 59.6378 18.457 59.9178 18.989C60.2118 19.507 60.5898 19.906 61.0518 20.186C61.5278 20.466 62.0318 20.606 62.5638 20.606C63.1098 20.606 63.6208 20.473 64.0968 20.207C64.5728 19.927 64.9508 19.535 65.2308 19.031C65.5108 18.513 65.6508 17.897 65.6508 17.183ZM75.9352 23.189C74.9832 23.189 74.1292 23.021 73.3732 22.685C72.6172 22.335 72.0152 21.866 71.5672 21.278C71.1332 20.69 70.8952 20.039 70.8532 19.325H73.8142C73.8702 19.773 74.0872 20.144 74.4652 20.438C74.8572 20.732 75.3402 20.879 75.9142 20.879C76.4742 20.879 76.9082 20.767 77.2162 20.543C77.5382 20.319 77.6992 20.032 77.6992 19.682C77.6992 19.304 77.5032 19.024 77.1112 18.842C76.7332 18.646 76.1242 18.436 75.2842 18.212C74.4162 18.002 73.7022 17.785 73.1422 17.561C72.5962 17.337 72.1202 16.994 71.7142 16.532C71.3222 16.07 71.1262 15.447 71.1262 14.663C71.1262 14.019 71.3082 13.431 71.6722 12.899C72.0502 12.367 72.5822 11.947 73.2682 11.639C73.9682 11.331 74.7872 11.177 75.7252 11.177C77.1112 11.177 78.2172 11.527 79.0432 12.227C79.8692 12.913 80.3242 13.844 80.4082 15.02H77.5942C77.5522 14.558 77.3562 14.194 77.0062 13.928C76.6702 13.648 76.2152 13.508 75.6412 13.508C75.1092 13.508 74.6962 13.606 74.4022 13.802C74.1222 13.998 73.9822 14.271 73.9822 14.621C73.9822 15.013 74.1782 15.314 74.5702 15.524C74.9622 15.72 75.5712 15.923 76.3972 16.133C77.2372 16.343 77.9302 16.56 78.4762 16.784C79.0222 17.008 79.4912 17.358 79.8832 17.834C80.2892 18.296 80.4992 18.912 80.5132 19.682C80.5132 20.354 80.3242 20.956 79.9462 21.488C79.5822 22.02 79.0502 22.44 78.3502 22.748C77.6642 23.042 76.8592 23.189 75.9352 23.189ZM95.0855 8.342V23H92.1455V16.763H85.8665V23H82.9265V8.342H85.8665V14.369H92.1455V8.342H95.0855ZM108.962 11.366V23H106.001V21.53C105.623 22.034 105.126 22.433 104.51 22.727C103.908 23.007 103.25 23.147 102.536 23.147C101.626 23.147 100.821 22.958 100.121 22.58C99.4213 22.188 98.8683 21.621 98.4623 20.879C98.0703 20.123 97.8743 19.227 97.8743 18.191V11.366H100.814V17.771C100.814 18.695 101.045 19.409 101.507 19.913C101.969 20.403 102.599 20.648 103.397 20.648C104.209 20.648 104.846 20.403 105.308 19.913C105.77 19.409 106.001 18.695 106.001 17.771V11.366H108.962ZM114.803 13.067C115.181 12.507 115.699 12.052 116.357 11.702C117.029 11.352 117.792 11.177 118.646 11.177C119.64 11.177 120.536 11.422 121.334 11.912C122.146 12.402 122.783 13.102 123.245 14.012C123.721 14.908 123.959 15.951 123.959 17.141C123.959 18.331 123.721 19.388 123.245 20.312C122.783 21.222 122.146 21.929 121.334 22.433C120.536 22.937 119.64 23.189 118.646 23.189C117.778 23.189 117.015 23.021 116.357 22.685C115.713 22.335 115.195 21.887 114.803 21.341V23H111.863V7.46H114.803V13.067ZM120.956 17.141C120.956 16.441 120.809 15.839 120.515 15.335C120.235 14.817 119.857 14.425 119.381 14.159C118.919 13.893 118.415 13.76 117.869 13.76C117.337 13.76 116.833 13.9 116.357 14.18C115.895 14.446 115.517 14.838 115.223 15.356C114.943 15.874 114.803 16.483 114.803 17.183C114.803 17.883 114.943 18.492 115.223 19.01C115.517 19.528 115.895 19.927 116.357 20.207C116.833 20.473 117.337 20.606 117.869 20.606C118.415 20.606 118.919 20.466 119.381 20.186C119.857 19.906 120.235 19.507 120.515 18.989C120.809 18.471 120.956 17.855 120.956 17.141Z" class="fill-black dark:fill-white"/>
+                    <path d="M39 2L40.1226 5.45492H43.7553L40.8164 7.59017L41.9389 11.0451L39 8.90983L36.0611 11.0451L37.1836 7.59017L34.2447 5.45492H37.8774L39 2Z" fill="#DC2626"/>
+                </svg>
             </div>
 
-            <h1 class="mb-4 text-3xl font-bold text-gray-900 md:text-4xl">
-                Ups! Diese Seite hat sich versteckt
-            </h1>
-
-            <p class="mb-8 text-lg text-gray-600">
-                Sieht so aus, als hätte diese Seite ein besseres Versteck gefunden als wir dachten.
-                Vielleicht macht sie gerade Urlaub? 🏖️
-            </p>
-
-            <div class="mb-8 rounded-xl border border-gray-200 bg-white p-6 text-left shadow-lg">
-                <h2 class="mb-4 text-lg font-semibold text-gray-900">
-                    Was du jetzt tun kannst:
-                </h2>
-                <ul class="space-y-3 text-gray-600">
-                    <li class="flex items-start gap-3">
-                        <span class="text-xl">🔄</span>
-                        <span>Die URL nochmal überprüfen (Tippfehler passieren den Besten!)</span>
-                    </li>
-                    <li class="flex items-start gap-3">
-                        <span class="text-xl">🏠</span>
-                        <span>Zurück zur Startseite gehen und von vorne anfangen</span>
-                    </li>
-                    <li class="flex items-start gap-3">
-                        <span class="text-xl">🔍</span>
-                        <span>Nach dem suchen, was du eigentlich finden wolltest</span>
-                    </li>
-                    <li class="flex items-start gap-3">
-                        <span class="text-xl">☕</span>
-                        <span>Oder eine Kaffeepause machen - das hilft auch manchmal</span>
-                    </li>
-                </ul>
+            <!-- Error Content -->
+            <div class="text-center">
+                <p class="mb-2 text-sm font-semibold uppercase tracking-wider text-red-600 dark:text-red-500">
+                    404 Fehler
+                </p>
+                <h1 class="mb-4 text-4xl font-bold tracking-tight text-gray-900 dark:text-white md:text-5xl">
+                    Seite nicht gefunden
+                </h1>
+                <p class="mb-8 text-lg text-gray-600 dark:text-gray-400">
+                    Die angeforderte Seite konnte nicht gefunden werden.
+                </p>
             </div>
 
-            <div class="flex flex-col gap-4 sm:flex-row sm:justify-center">
+            <!-- Action Buttons -->
+            <div class="mb-12 flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <a
                     href="/"
-                    class="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-3 text-white font-medium transition-all hover:scale-105 hover:shadow-xl"
+                    class="inline-flex items-center justify-center rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200"
                 >
-                    🏠 Zurück zur Startseite
+                    <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                    </svg>
+                    Zur Startseite
                 </a>
-
                 <button
                     onclick="history.back()"
-                    class="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-gray-300 bg-white px-6 py-3 font-medium text-gray-700 transition-all hover:border-gray-400 hover:bg-gray-50"
+                    class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
-                    ← Eine Seite zurück
+                    <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    Zurück
                 </button>
             </div>
 
-            <p class="mt-12 text-sm text-gray-500">
-                Fehlercode: 404 | Status: Seite spielt Verstecken 🙈
-            </p>
+            <!-- Footer -->
+            <div class="border-t border-gray-200 pt-8 text-center dark:border-gray-800">
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                    Fehlercode: 404
+                </p>
+            </div>
         </div>
     </div>
 </body>

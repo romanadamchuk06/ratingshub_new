@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import {
     SidebarGroup,
     SidebarGroupLabel,
@@ -7,12 +7,11 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { urlIsActive } from '@/lib/utils';
-import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 
-defineProps<{
-    items: NavItem[];
-}>();
+defineProps({
+    items: Array,
+});
 
 const page = usePage();
 </script>
@@ -23,11 +22,12 @@ const page = usePage();
         <SidebarMenu>
             <SidebarMenuItem v-for="item in items" :key="item.title">
                 <SidebarMenuButton
+                    :class="{ 'pointer-events-none opacity-50': item.disabled }"
                     as-child
-                    :is-active="urlIsActive(item.href, page.url)"
-                    :tooltip="item.title"
+                    :is-active="!item.disabled && urlIsActive(item.href, page.url)"
+                    :tooltip="item.disabled ? 'Verbinde zuerst eine Plattform' : item.title"
                 >
-                    <Link :href="item.href">
+                    <Link :href="item.disabled ? '#' : item.href">
                         <component :is="item.icon" />
                         <span>{{ item.title }}</span>
                     </Link>

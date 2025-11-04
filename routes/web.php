@@ -11,16 +11,28 @@ Route::get('/', function () {
     ]);
 })->name('home');
 
-Route::get('dashboard', function () {
-    $hasGoogleConnected = auth()->user()->connectedPlatforms()
-        ->where('provider', 'google')
-        ->where('is_active', true)
-        ->exists();
+// Test routes for error pages (remove in production)
+Route::get('/404', function () {
+    return Inertia::render('errors/404');
+});
 
-    return Inertia::render('Dashboard', [
-        'hasGoogleConnected' => $hasGoogleConnected,
-    ]);
+Route::get('/500', function () {
+    return Inertia::render('errors/500');
+});
+
+Route::get('/503', function () {
+    return Inertia::render('errors/503');
+});
+
+Route::get('dashboard', function () {
+    return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+Route::get('reviews', function () {
+    return Inertia::render('Reviews', [
+        'reviews' => [], // TODO: Fetch actual reviews from database
+    ]);
+})->middleware(['auth', 'verified'])->name('reviews');
 
 // Platform OAuth Routes
 Route::middleware(['auth', 'verified'])->prefix('platforms')->name('platforms.')->group(function () {

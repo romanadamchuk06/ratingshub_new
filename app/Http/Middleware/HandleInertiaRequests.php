@@ -44,6 +44,11 @@ class HandleInertiaRequests extends Middleware
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $request->user(),
+                'hasPlatformConnected' => $request->user()
+                    ? $request->user()->connectedPlatforms()
+                        ->where('is_active', true)
+                        ->exists()
+                    : false,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
