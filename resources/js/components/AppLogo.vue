@@ -1,16 +1,21 @@
-<script setup lang="ts">
-import AppLogoIcon from '@/components/AppLogoIcon.vue';
+<script setup>
+import logoLight from '@/assets/logo-light.svg';
+import logoDark from '@/assets/logo-dark.svg';
 </script>
 
 <template>
-    <div
-        class="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground"
-    >
-        <AppLogoIcon class="size-5 fill-current text-white dark:text-black" />
-    </div>
-    <div class="ml-1 grid flex-1 text-left text-sm">
-        <span class="mb-0.5 truncate leading-tight font-semibold"
-            >Laravel Starter Kit</span
-        >
+    <div class="flex items-center justify-center w-full">
+        <!-- Light mode logo -->
+        <img
+            :src="logoLight"
+            alt="RatingsHub Logo"
+            class="h-10 w-auto max-w-full dark:hidden"
+        />
+        <!-- Dark mode logo -->
+        <img
+            :src="logoDark"
+            alt="RatingsHub Logo"
+            class="hidden h-10 w-auto max-w-full dark:block"
+        />
     </div>
 </template>

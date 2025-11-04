@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    // Central OAuth App - Each user connects their own Google account
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('APP_URL') . '/platforms/callback/google',
+    ],
+
 ];

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import InputError from '@/components/InputError.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
@@ -10,17 +10,17 @@ import { email } from '@/routes/password';
 import { Form, Head } from '@inertiajs/vue3';
 import { LoaderCircle } from 'lucide-vue-next';
 
-defineProps<{
-    status?: string;
-}>();
+defineProps({
+    status: String,
+});
 </script>
 
 <template>
     <AuthLayout
-        title="Forgot password"
-        description="Enter your email to receive a password reset link"
+        title="Passwort vergessen"
+        description="Gib deine E-Mail-Adresse ein, um einen Link zum Zurücksetzen zu erhalten"
     >
-        <Head title="Forgot password" />
+        <Head title="Passwort vergessen" />
 
         <div
             v-if="status"
@@ -32,14 +32,14 @@ defineProps<{
         <div class="space-y-6">
             <Form v-bind="email.form()" v-slot="{ errors, processing }">
                 <div class="grid gap-2">
-                    <Label for="email">Email address</Label>
+                    <Label for="email">E-Mail-Adresse</Label>
                     <Input
                         id="email"
                         type="email"
                         name="email"
                         autocomplete="off"
                         autofocus
-                        placeholder="email@example.com"
+                        placeholder="email@beispiel.de"
                     />
                     <InputError :message="errors.email" />
                 </div>
@@ -54,14 +54,14 @@ defineProps<{
                             v-if="processing"
                             class="h-4 w-4 animate-spin"
                         />
-                        Email password reset link
+                        Zurücksetzen-Link per E-Mail senden
                     </Button>
                 </div>
             </Form>
 
             <div class="space-x-1 text-center text-sm text-muted-foreground">
-                <span>Or, return to</span>
-                <TextLink :href="login()">log in</TextLink>
+                <span>Oder zurück zur</span>
+                <TextLink :href="login()">Anmeldung</TextLink>
             </div>
         </div>
     </AuthLayout>

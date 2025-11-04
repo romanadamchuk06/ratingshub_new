@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import Heading from '@/components/Heading.vue';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -7,24 +7,27 @@ import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editProfile } from '@/routes/profile';
 import { show } from '@/routes/two-factor';
 import { edit as editPassword } from '@/routes/user-password';
-import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
 
-const sidebarNavItems: NavItem[] = [
+const sidebarNavItems = [
     {
-        title: 'Profile',
+        title: 'Profil',
         href: editProfile(),
     },
     {
-        title: 'Password',
+        title: 'Passwort',
         href: editPassword(),
     },
     {
-        title: 'Two-Factor Auth',
+        title: 'Zwei-Faktor-Auth',
         href: show(),
     },
     {
-        title: 'Appearance',
+        title: 'Plattformen',
+        href: '/settings/platforms',
+    },
+    {
+        title: 'Design',
         href: editAppearance(),
     },
 ];
@@ -35,8 +38,8 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
 <template>
     <div class="px-4 py-6">
         <Heading
-            title="Settings"
-            description="Manage your profile and account settings"
+            title="Einstellungen"
+            description="Verwalte dein Profil und deine Kontoeinstellungen"
         />
 
         <div class="flex flex-col lg:flex-row lg:space-x-12">

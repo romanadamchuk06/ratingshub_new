@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import PasswordController from '@/actions/App/Http/Controllers/Settings/PasswordController';
 import InputError from '@/components/InputError.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -11,28 +11,27 @@ import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { type BreadcrumbItem } from '@/types';
 
-const breadcrumbItems: BreadcrumbItem[] = [
+const breadcrumbItems = [
     {
-        title: 'Password settings',
+        title: 'Passwort-Einstellungen',
         href: edit().url,
     },
 ];
 
-const passwordInput = ref<HTMLInputElement | null>(null);
-const currentPasswordInput = ref<HTMLInputElement | null>(null);
+const passwordInput = ref(null);
+const currentPasswordInput = ref(null);
 </script>
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbItems">
-        <Head title="Password settings" />
+        <Head title="Passwort-Einstellungen" />
 
         <SettingsLayout>
             <div class="space-y-6">
                 <HeadingSmall
-                    title="Update password"
-                    description="Ensure your account is using a long, random password to stay secure"
+                    title="Passwort aktualisieren"
+                    description="Stelle sicher, dass dein Konto ein langes, zufälliges Passwort verwendet, um sicher zu bleiben"
                 />
 
                 <Form
@@ -50,7 +49,7 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                     v-slot="{ errors, processing, recentlySuccessful }"
                 >
                     <div class="grid gap-2">
-                        <Label for="current_password">Current password</Label>
+                        <Label for="current_password">Aktuelles Passwort</Label>
                         <Input
                             id="current_password"
                             ref="currentPasswordInput"
@@ -58,13 +57,13 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                             type="password"
                             class="mt-1 block w-full"
                             autocomplete="current-password"
-                            placeholder="Current password"
+                            placeholder="Aktuelles Passwort"
                         />
                         <InputError :message="errors.current_password" />
                     </div>
 
                     <div class="grid gap-2">
-                        <Label for="password">New password</Label>
+                        <Label for="password">Neues Passwort</Label>
                         <Input
                             id="password"
                             ref="passwordInput"
@@ -72,14 +71,14 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                             type="password"
                             class="mt-1 block w-full"
                             autocomplete="new-password"
-                            placeholder="New password"
+                            placeholder="Neues Passwort"
                         />
                         <InputError :message="errors.password" />
                     </div>
 
                     <div class="grid gap-2">
                         <Label for="password_confirmation"
-                            >Confirm password</Label
+                            >Passwort bestätigen</Label
                         >
                         <Input
                             id="password_confirmation"
@@ -87,7 +86,7 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                             type="password"
                             class="mt-1 block w-full"
                             autocomplete="new-password"
-                            placeholder="Confirm password"
+                            placeholder="Passwort bestätigen"
                         />
                         <InputError :message="errors.password_confirmation" />
                     </div>
@@ -96,7 +95,7 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                         <Button
                             :disabled="processing"
                             data-test="update-password-button"
-                            >Save password</Button
+                            >Passwort speichern</Button
                         >
 
                         <Transition
@@ -109,7 +108,7 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                                 v-show="recentlySuccessful"
                                 class="text-sm text-neutral-600"
                             >
-                                Saved.
+                                Gespeichert.
                             </p>
                         </Transition>
                     </div>

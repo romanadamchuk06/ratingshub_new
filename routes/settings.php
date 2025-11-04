@@ -25,4 +25,11 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
+
+    Route::get('settings/platforms', function () {
+        $connectedPlatforms = auth()->user()->connectedPlatforms;
+        return Inertia::render('settings/Platforms', [
+            'connectedPlatforms' => $connectedPlatforms,
+        ]);
+    })->name('settings.platforms');
 });

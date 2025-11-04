@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,40 +12,34 @@ import { store } from '@/routes/two-factor/login';
 import { Form, Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
-interface AuthConfigContent {
-    title: string;
-    description: string;
-    toggleText: string;
-}
-
-const authConfigContent = computed<AuthConfigContent>(() => {
+const authConfigContent = computed(() => {
     if (showRecoveryInput.value) {
         return {
-            title: 'Recovery Code',
+            title: 'Wiederherstellungscode',
             description:
-                'Please confirm access to your account by entering one of your emergency recovery codes.',
-            toggleText: 'login using an authentication code',
+                'Bitte bestätige den Zugriff auf dein Konto, indem du einen deiner Notfall-Wiederherstellungscodes eingibst.',
+            toggleText: 'Mit Authentifizierungscode anmelden',
         };
     }
 
     return {
-        title: 'Authentication Code',
+        title: 'Authentifizierungscode',
         description:
-            'Enter the authentication code provided by your authenticator application.',
-        toggleText: 'login using a recovery code',
+            'Gib den Authentifizierungscode ein, den deine Authentifizierungs-App bereitstellt.',
+        toggleText: 'Mit Wiederherstellungscode anmelden',
     };
 });
 
-const showRecoveryInput = ref<boolean>(false);
+const showRecoveryInput = ref(false);
 
-const toggleRecoveryMode = (clearErrors: () => void): void => {
+const toggleRecoveryMode = (clearErrors) => {
     showRecoveryInput.value = !showRecoveryInput.value;
     clearErrors();
     code.value = [];
 };
 
-const code = ref<number[]>([]);
-const codeValue = computed<string>(() => code.value.join(''));
+const code = ref([]);
+const codeValue = computed(() => code.value.join(''));
 </script>
 
 <template>
@@ -53,7 +47,7 @@ const codeValue = computed<string>(() => code.value.join(''));
         :title="authConfigContent.title"
         :description="authConfigContent.description"
     >
-        <Head title="Two-Factor Authentication" />
+        <Head title="Zwei-Faktor-Authentifizierung" />
 
         <div class="space-y-6">
             <template v-if="!showRecoveryInput">
@@ -90,10 +84,10 @@ const codeValue = computed<string>(() => code.value.join(''));
                         <InputError :message="errors.code" />
                     </div>
                     <Button type="submit" class="w-full" :disabled="processing"
-                        >Continue</Button
+                        >Weiter</Button
                     >
                     <div class="text-center text-sm text-muted-foreground">
-                        <span>or you can </span>
+                        <span>oder du kannst dich </span>
                         <button
                             type="button"
                             class="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
@@ -115,17 +109,17 @@ const codeValue = computed<string>(() => code.value.join(''));
                     <Input
                         name="recovery_code"
                         type="text"
-                        placeholder="Enter recovery code"
+                        placeholder="Wiederherstellungscode eingeben"
                         :autofocus="showRecoveryInput"
                         required
                     />
                     <InputError :message="errors.recovery_code" />
                     <Button type="submit" class="w-full" :disabled="processing"
-                        >Continue</Button
+                        >Weiter</Button
                     >
 
                     <div class="text-center text-sm text-muted-foreground">
-                        <span>or you can </span>
+                        <span>oder du kannst dich </span>
                         <button
                             type="button"
                             class="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"

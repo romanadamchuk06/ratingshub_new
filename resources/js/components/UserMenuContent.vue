@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import UserInfo from '@/components/UserInfo.vue';
 import {
     DropdownMenuGroup,
@@ -8,19 +8,16 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
-import type { User } from '@/types';
 import { Link, router } from '@inertiajs/vue3';
 import { LogOut, Settings } from 'lucide-vue-next';
-
-interface Props {
-    user: User;
-}
 
 const handleLogout = () => {
     router.flushAll();
 };
 
-defineProps<Props>();
+defineProps({
+    user: Object,
+});
 </script>
 
 <template>
@@ -34,7 +31,7 @@ defineProps<Props>();
         <DropdownMenuItem :as-child="true">
             <Link class="block w-full" :href="edit()" prefetch as="button">
                 <Settings class="mr-2 h-4 w-4" />
-                Settings
+                Einstellungen
             </Link>
         </DropdownMenuItem>
     </DropdownMenuGroup>
@@ -48,7 +45,7 @@ defineProps<Props>();
             data-test="logout-button"
         >
             <LogOut class="mr-2 h-4 w-4" />
-            Log out
+            Abmelden
         </Link>
     </DropdownMenuItem>
 </template>
