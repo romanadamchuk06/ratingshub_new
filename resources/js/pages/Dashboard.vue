@@ -5,7 +5,19 @@ import { ref, onMounted, computed } from 'vue';
 import ConnectPlatformModal from '../components/ConnectPlatformModal.vue';
 import StatsCard from '../components/StatsCard.vue';
 import EmptyState from '../components/EmptyState.vue';
+import LocationSelector from '../components/LocationSelector.vue';
 import { Star, TrendingUp, MessageSquare, Award, Link2 } from 'lucide-vue-next';
+
+const props = defineProps({
+    connectedPlatforms: {
+        type: Array,
+        default: () => [],
+    },
+    selectedLocationIds: {
+        type: Array,
+        default: () => [],
+    },
+});
 
 const page = usePage();
 const hasPlatformConnected = computed(() => page.props.auth.hasPlatformConnected);
@@ -35,11 +47,20 @@ const closeModal = () => {
     <AppLayout>
         <div class="space-y-6 p-4 md:p-6 lg:p-8">
             <!-- Header -->
-            <div>
-                <h1 class="text-2xl font-bold tracking-tight md:text-3xl">Dashboard</h1>
-                <p class="text-muted-foreground">
-                    Überblick über deine Bewertungen und Statistiken
-                </p>
+            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight md:text-3xl">Dashboard</h1>
+                    <p class="text-muted-foreground">
+                        Überblick über deine Bewertungen und Statistiken
+                    </p>
+                </div>
+
+                <!-- Location Selector (nur anzeigen wenn Plattformen verbunden) -->
+                <LocationSelector
+                    v-if="hasPlatformConnected && connectedPlatforms.length > 0"
+                    :locations="connectedPlatforms"
+                    :selected-ids="selectedLocationIds"
+                />
             </div>
 
             <!-- Stats Grid -->

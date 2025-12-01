@@ -1,0 +1,59 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+/**
+ * Review Model
+ *
+ * Speichert Reviews von verschiedenen Plattformen (Google, Trustpilot, etc.)
+ * Jeder Review gehört zu einem User und einer verbundenen Plattform.
+ */
+class Review extends Model
+{
+    protected $fillable = [
+        'user_id',
+        'connected_platform_id',
+        'provider_review_id',
+        'rating',
+        'text',
+        'reviewer_name',
+        'reviewer_photo_url',
+        'review_date',
+        'status',
+        'metadata',
+    ];
+
+    protected $casts = [
+        'metadata' => 'array', // JSON -> Array
+        'review_date' => 'datetime',
+        'rating' => 'integer',
+    ];
+
+    /**
+     * Beziehung: Review gehört zu einem User (Owner)
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Beziehung: Review stammt von einer verbundenen Plattform
+     */
+    public function connectedPlatform(): BelongsTo
+    {
+        return $this->belongsTo(ConnectedPlatform::class);
+    }
+
+    /**
+     * Beziehung: Review kann mehrere Antworten haben
+     */
+    public function responses(): HasMany
+    {
+        return $this->hasMany(ReviewResponse::class);
+    }
+}

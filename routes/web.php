@@ -5,6 +5,23 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
+/**
+ * STRIPE WEBHOOKS
+ * ===============
+ *
+ * Laravel Cashier registriert automatisch die Webhook-Route:
+ * POST /stripe/webhook
+ *
+ * Stripe sendet Events an diese Route:
+ * - invoice.payment_succeeded → Zahlung erfolgreich
+ * - invoice.payment_failed → Zahlung fehlgeschlagen
+ * - customer.subscription.updated → Abo geändert
+ * - customer.subscription.deleted → Abo gekündigt
+ *
+ * Die Route ist automatisch von CSRF-Protection ausgenommen.
+ * Cashier aktualisiert automatisch die `subscriptions` Tabelle.
+ */
+
 Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canRegister' => Features::enabled(Features::registration()),
@@ -24,15 +41,70 @@ Route::get('/503', function () {
     return Inertia::render('errors/503');
 });
 
-Route::get('dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+/**
+ * GESCHÜTZTE ROUTEN - NUR FÜR ZAHLENDE USER
+ * ===========================================
+ *
+ * Diese Routes sind mit 'subscribed' Middleware geschützt.
+ * User ohne aktives Abo werden zu /subscription umgeleitet.
+ *
+ * Admins haben IMMER Zugriff (auch ohne Abo).
+ */
+Route::middleware(['auth', 'verified', 'subscribed'])->group(function () {
+    Route::get('dashboard', function () {
+        $user = auth()->user();
 
-Route::get('reviews', function () {
-    return Inertia::render('Reviews', [
-        'reviews' => [], // TODO: Fetch actual reviews from database
-    ]);
-})->middleware(['auth', 'verified'])->name('reviews');
+        // Connected Platforms laden (für Location Selector)
+        $connectedPlatforms = $user->connectedPlatforms()
+            ->where('is_active', true)
+            ->get(['id', 'provider', 'metadata']);
+
+        // Selected Location IDs aus URL holen (Komma-separiert)
+        $selectedLocationIds = [];
+        if (request()->has('locations')) {
+            $selectedLocationIds = array_map('intval', explode(',', request('locations')));
+        }
+
+        return Inertia::render('Dashboard', [
+            'connectedPlatforms' => $connectedPlatforms,
+            'selectedLocationIds' => $selectedLocationIds,
+        ]);
+    })->name('dashboard');
+
+});
+
+/**
+ * REVIEW MANAGEMENT ROUTES
+ * =========================
+ *
+ * Verwaltet Reviews von verschiedenen Plattformen (Google, Trustpilot, etc.)
+ *
+ * Features:
+ * - Reviews von APIs abrufen und speichern
+ * - Reviews anzeigen mit Filtern (Status, Rating, Plattform)
+ * - Auf Reviews antworten
+ * - Review-Status verwalten (pending, responded, archived)
+ * - Statistiken über Reviews
+ */
+Route::middleware(['auth', 'verified', 'subscribed'])->prefix('reviews')->name('reviews.')->group(function () {
+    // Reviews-Übersicht (Index mit Filtern)
+    Route::get('/', [\App\Http\Controllers\ReviewController::class, 'index'])->name('index');
+
+    // Reviews von API synchronisieren
+    Route::post('/sync', [\App\Http\Controllers\ReviewController::class, 'sync'])->name('sync');
+
+    // Review-Status aktualisieren (pending → responded → archived)
+    Route::patch('/{review}/status', [\App\Http\Controllers\ReviewController::class, 'updateStatus'])->name('update-status');
+
+    // Auf Review antworten
+    Route::post('/{review}/respond', [\App\Http\Controllers\ReviewController::class, 'respond'])->name('respond');
+
+    // Antwort löschen
+    Route::delete('/responses/{response}', [\App\Http\Controllers\ReviewController::class, 'deleteResponse'])->name('delete-response');
+
+    // Review-Statistiken (für Dashboard)
+    Route::get('/stats', [\App\Http\Controllers\ReviewController::class, 'stats'])->name('stats');
+});
 
 // Platform OAuth Routes
 Route::middleware(['auth', 'verified'])->prefix('platforms')->name('platforms.')->group(function () {
@@ -41,13 +113,48 @@ Route::middleware(['auth', 'verified'])->prefix('platforms')->name('platforms.')
     Route::delete('/{platform}', [PlatformController::class, 'disconnect'])->name('disconnect');
 });
 
+// Subscription Routes
+Route::middleware(['auth', 'verified'])->prefix('subscription')->name('subscription.')->group(function () {
+    Route::get('/', [App\Http\Controllers\SubscriptionController::class, 'index'])->name('index');
+    Route::get('/checkout/{plan}', [App\Http\Controllers\SubscriptionController::class, 'checkout'])->name('checkout');
+    Route::post('/subscribe/{plan}', [App\Http\Controllers\SubscriptionController::class, 'subscribe'])->name('subscribe');
+    Route::post('/validate-promo-code', [App\Http\Controllers\SubscriptionController::class, 'validatePromoCode'])->name('validate-promo-code');
+    Route::get('/success', [App\Http\Controllers\SubscriptionController::class, 'success'])->name('success');
+    Route::get('/manage', [App\Http\Controllers\SubscriptionController::class, 'manage'])->name('manage');
+    Route::post('/cancel', [App\Http\Controllers\SubscriptionController::class, 'cancel'])->name('cancel');
+    Route::post('/resume', [App\Http\Controllers\SubscriptionController::class, 'resume'])->name('resume');
+    Route::post('/payment-method', [App\Http\Controllers\SubscriptionController::class, 'updatePaymentMethod'])->name('payment-method.update');
+    Route::get('/invoice/{invoice}', [App\Http\Controllers\SubscriptionController::class, 'invoice'])->name('invoice');
+});
+
+// Bug Report Routes (für User)
+Route::middleware(['auth', 'verified'])->prefix('bug-reports')->name('bug-reports.')->group(function () {
+    Route::get('/create', [\App\Http\Controllers\BugReportController::class, 'create'])->name('create');
+    Route::post('/', [\App\Http\Controllers\BugReportController::class, 'store'])->name('store');
+    Route::get('/my-reports', [\App\Http\Controllers\BugReportController::class, 'myReports'])->name('my-reports');
+});
+
 // Admin Routes
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', function () {
         return Inertia::render('Admin/Dashboard', [
             'stats' => [
+                // Gesamte Benutzer (registriert)
                 'totalUsers' => \App\Models\User::count(),
+
+                // Verbundene Plattformen (OAuth-Connections)
                 'totalPlatforms' => \App\Models\ConnectedPlatform::count(),
+
+                // Aktive Subscriptions (User mit plan_id)
+                'activeSubscriptions' => \App\Models\User::whereNotNull('plan_id')->count(),
+
+                // Aktive Promo Codes (is_active = true)
+                'activePromoCodes' => \App\Models\PromoCode::where('is_active', true)->count(),
+
+                // Gesamt Subscription-Pläne (aktiv + inaktiv)
+                'totalPlans' => \App\Models\Plan::count(),
+
+                // Administratoren (is_admin = true)
                 'totalAdmins' => \App\Models\User::where('is_admin', true)->count(),
             ],
         ]);
@@ -56,6 +163,38 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     // User Management
     Route::resource('users', \App\Http\Controllers\Admin\UserController::class);
     Route::post('users/{user}/toggle-admin', [\App\Http\Controllers\Admin\UserController::class, 'toggleAdmin'])->name('users.toggle-admin');
+
+    // Subscription Management
+    Route::get('subscriptions', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'index'])->name('subscriptions.index');
+    Route::post('subscriptions/{user}/update-plan', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'updatePlan'])->name('subscriptions.update-plan');
+    Route::post('subscriptions/{user}/cancel', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'cancelSubscription'])->name('subscriptions.cancel');
+    Route::post('subscriptions/{user}/cancel-now', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'cancelSubscriptionNow'])->name('subscriptions.cancel-now');
+    Route::post('subscriptions/{user}/resume', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'resumeSubscription'])->name('subscriptions.resume');
+
+    // Promo Code Management
+    Route::get('promo-codes', [\App\Http\Controllers\Admin\PromoCodeController::class, 'index'])->name('promo-codes.index');
+    Route::post('promo-codes', [\App\Http\Controllers\Admin\PromoCodeController::class, 'store'])->name('promo-codes.store');
+    Route::patch('promo-codes/{promoCode}', [\App\Http\Controllers\Admin\PromoCodeController::class, 'update'])->name('promo-codes.update');
+    Route::delete('promo-codes/{promoCode}', [\App\Http\Controllers\Admin\PromoCodeController::class, 'destroy'])->name('promo-codes.destroy');
+
+    // Plan Management
+    Route::get('plans', [\App\Http\Controllers\Admin\PlanController::class, 'index'])->name('plans.index');
+    Route::get('plans/create', [\App\Http\Controllers\Admin\PlanController::class, 'create'])->name('plans.create');
+    Route::post('plans', [\App\Http\Controllers\Admin\PlanController::class, 'store'])->name('plans.store');
+    Route::get('plans/{plan}/edit', [\App\Http\Controllers\Admin\PlanController::class, 'edit'])->name('plans.edit');
+    Route::patch('plans/{plan}', [\App\Http\Controllers\Admin\PlanController::class, 'update'])->name('plans.update');
+    Route::post('plans/{plan}/toggle-active', [\App\Http\Controllers\Admin\PlanController::class, 'toggleActive'])->name('plans.toggle-active');
+    Route::post('plans/{plan}/toggle-popular', [\App\Http\Controllers\Admin\PlanController::class, 'togglePopular'])->name('plans.toggle-popular');
+    Route::delete('plans/{plan}', [\App\Http\Controllers\Admin\PlanController::class, 'destroy'])->name('plans.destroy');
+
+    // Activity Logs (READ-ONLY - keine Edit/Delete!)
+    Route::get('activity-logs', [\App\Http\Controllers\Admin\ActivityLogController::class, 'index'])->name('activity-logs.index');
+
+    // Bug Reports Management
+    Route::get('bug-reports', [\App\Http\Controllers\BugReportController::class, 'index'])->name('bug-reports.index');
+    Route::get('bug-reports/{bugReport}', [\App\Http\Controllers\BugReportController::class, 'show'])->name('bug-reports.show');
+    Route::patch('bug-reports/{bugReport}', [\App\Http\Controllers\BugReportController::class, 'update'])->name('bug-reports.update');
+    Route::delete('bug-reports/{bugReport}', [\App\Http\Controllers\BugReportController::class, 'destroy'])->name('bug-reports.destroy');
 });
 
 require __DIR__.'/settings.php';

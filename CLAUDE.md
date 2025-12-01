@@ -50,3 +50,6 @@
   ⚠️ Webhook Handling - Für Echtzeit-Updates
   ⚠️ Compliance - DSGVO, da du Kundendaten verarbeitest
 - schreibe mit js statt ts
+- > ich will das du die ganze anwendung so überschauber und verständlich hältst wie es geht
+- ich will das du deine ganzen gedanken wie du vorgehst und wie du dazu kamst erklärst und auch kurz in commentaren im code hinzufügst
+- ich möchte das du jetzt alles dokumentierst. wie alles miteinander interagiert und erklärst drin was wieso weshalb
