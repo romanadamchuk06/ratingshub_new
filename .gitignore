@@ -26,3 +26,8 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Laravel Cloud Environment Files
+.env.cloud
+LARAVEL_CLOUD_ENV.txt
+LARAVEL_CLOUD_ENV_CORRECTED.txt
