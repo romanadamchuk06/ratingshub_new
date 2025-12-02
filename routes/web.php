@@ -23,8 +23,14 @@ use Laravel\Fortify\Features;
  */
 
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
+    // Aktive Pläne aus der Datenbank laden, sortiert nach sort_order
+    $plans = \App\Models\Plan::where('is_active', true)
+        ->orderBy('sort_order')
+        ->get(['id', 'name', 'slug', 'price', 'description', 'features', 'is_popular']);
+
+    return Inertia::render('WelcomeNew', [
         'canRegister' => Features::enabled(Features::registration()),
+        'plans' => $plans,
     ]);
 })->name('home');
 

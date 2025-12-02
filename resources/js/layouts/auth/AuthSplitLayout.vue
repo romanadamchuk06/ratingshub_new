@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import AppLogoIcon from '@/components/AppLogoIcon.vue';
+// AppLogo verwendet das volle RatingsHub Logo (logo-light.svg / logo-dark.svg)
+import AppLogo from '@/components/AppLogo.vue';
 import { home } from '@/routes';
 import { Link, usePage } from '@inertiajs/vue3';
 
 const page = usePage();
-const name = page.props.name;
+// Quote für die linke Sidebar (optional)
 const quote = page.props.quote;
 
 defineProps<{
@@ -21,12 +22,12 @@ defineProps<{
             class="relative hidden h-full flex-col bg-muted p-10 text-white lg:flex dark:border-r"
         >
             <div class="absolute inset-0 bg-zinc-900" />
+            <!-- RatingsHub Logo (reagiert automatisch auf Dark Mode) -->
             <Link
                 :href="home()"
                 class="relative z-20 flex items-center text-lg font-medium"
             >
-                <AppLogoIcon class="mr-2 size-8 fill-current text-white" />
-                {{ name }}
+                <AppLogo />
             </Link>
             <div v-if="quote" class="relative z-20 mt-auto">
                 <blockquote class="space-y-2">

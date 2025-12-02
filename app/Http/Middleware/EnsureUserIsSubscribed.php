@@ -36,8 +36,17 @@ class EnsureUserIsSubscribed
             return $next($request);
         }
 
-        // Prüfe ob User ein aktives Abo hat (inkl. Grace Period!)
-        if ($user && !$user->subscribed($subscription)) {
+        // Prüfe ob User ein aktives Abo hat
+        // WICHTIG: Wir prüfen zwei Systeme:
+        // 1. Plan-basiert: user.plan_id (direktes Plan-Assignment)
+        // 2. Cashier-basiert: subscriptions Tabelle (Stripe/Paddle Integration)
+        $hasAccess = $user && (
+            $user->plan_id !== null ||              // User hat direkt zugewiesenen Plan
+            $user->subscribed($subscription) ||      // User hat Cashier Subscription
+            $user->onTrial()                         // User ist in Trial-Phase
+        );
+
+        if (!$hasAccess) {
             // Redirect zu Subscription-Seite mit Nachricht
             return redirect()->route('subscription.index')
                 ->with('error', 'Du benötigst ein aktives Abonnement, um auf diese Funktion zuzugreifen.');

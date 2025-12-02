@@ -12,7 +12,7 @@
  */
 
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,8 +24,9 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Plus, X, AlertCircle } from 'lucide-vue-next';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ArrowLeft, Plus, X, AlertCircle, CheckCircle2 } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 const props = defineProps({
     plan: {
@@ -33,6 +34,11 @@ const props = defineProps({
         required: true,
     },
 });
+
+// Flash-Messages vom Server (success/error)
+const page = usePage();
+const flashSuccess = computed(() => page.props.flash?.success);
+const flashError = computed(() => page.props.flash?.error);
 
 // Form mit bestehenden Daten vorausfüllen
 const form = useForm({
@@ -69,9 +75,16 @@ const submit = () => {
     // Features filtern (nur nicht-leere)
     form.features = form.features.filter((f) => f.trim() !== '');
 
+    // DEBUGGING: Log Form-Daten in Console
+    console.log('Plan Update - Gesendete Daten:', form.data());
+
     form.patch(`/admin/plans/${props.plan.id}`, {
-        onError: () => {
-            // Fehler werden automatisch von Inertia behandelt
+        onSuccess: () => {
+            console.log('Plan erfolgreich aktualisiert');
+        },
+        onError: (errors) => {
+            // DEBUGGING: Log Fehler in Console
+            console.error('Plan Update Fehler:', errors);
         },
     });
 };
@@ -98,6 +111,33 @@ const submit = () => {
                     </p>
                 </div>
             </div>
+
+            <!-- SUCCESS-MESSAGE (vom Server) -->
+            <Alert v-if="flashSuccess" variant="default" class="border-green-500 bg-green-50 dark:bg-green-950">
+                <CheckCircle2 class="h-4 w-4 text-green-600 dark:text-green-400" />
+                <AlertTitle class="text-green-800 dark:text-green-200">Erfolg</AlertTitle>
+                <AlertDescription class="text-green-700 dark:text-green-300">
+                    {{ flashSuccess }}
+                </AlertDescription>
+            </Alert>
+
+            <!-- ERROR-MESSAGE (vom Server) -->
+            <Alert v-if="flashError" variant="destructive">
+                <AlertCircle class="h-4 w-4" />
+                <AlertTitle>Fehler</AlertTitle>
+                <AlertDescription>
+                    {{ flashError }}
+                </AlertDescription>
+            </Alert>
+
+            <!-- ALLGEMEINE VALIDIERUNGSFEHLER -->
+            <Alert v-if="form.errors && Object.keys(form.errors).length > 0 && !form.errors.name && !form.errors.slug && !form.errors.price" variant="destructive">
+                <AlertCircle class="h-4 w-4" />
+                <AlertTitle>Validierungsfehler</AlertTitle>
+                <AlertDescription>
+                    Bitte überprüfe die markierten Felder.
+                </AlertDescription>
+            </Alert>
 
             <!-- Warnung: User nutzen diesen Plan -->
             <Alert v-if="plan.users_count > 0" variant="default">
