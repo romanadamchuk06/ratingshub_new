@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -21,17 +22,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ReviewResponse extends Model
 {
+    use HasFactory;
     protected $fillable = [
         'review_id',
         'user_id',
-        'response_text',
-        'is_published',
-        'published_at',
+        'text',
+        'sent_at',
+        'provider_response_id',
+        'metadata',
     ];
 
     protected $casts = [
-        'is_published' => 'boolean',
-        'published_at' => 'datetime',
+        'sent_at' => 'datetime',
+        'metadata' => 'array',
     ];
 
     /**
