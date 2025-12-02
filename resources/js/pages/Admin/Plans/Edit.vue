@@ -48,9 +48,16 @@ const form = useForm({
     price: props.plan.price,
     max_platforms: props.plan.max_platforms,
     description: props.plan.description || '',
-    features: props.plan.features && props.plan.features.length > 0 ? props.plan.features : [''],
-    is_active: props.plan.is_active,
-    is_popular: props.plan.is_popular || false, // Zeigt "Beliebt"-Badge auf Pricing-Seite
+    // Features: Wenn es ein Object ist (aus DB), wandle es in Array um
+    // Wenn es ein Array ist, verwende es direkt
+    // Wenn leer, starte mit einem leeren String
+    features: Array.isArray(props.plan.features) && props.plan.features.length > 0
+        ? props.plan.features
+        : (props.plan.features && typeof props.plan.features === 'object'
+            ? Object.values(props.plan.features)
+            : ['']),
+    is_active: !!props.plan.is_active, // Boolean erzwingen
+    is_popular: !!props.plan.is_popular, // Boolean erzwingen
     sort_order: props.plan.sort_order || 10,
 });
 
@@ -72,13 +79,28 @@ const removeFeature = (index) => {
  * Form absenden
  */
 const submit = () => {
-    // Features filtern (nur nicht-leere)
-    form.features = form.features.filter((f) => f.trim() !== '');
+    // Features filtern (nur nicht-leere) und als Array senden
+    const cleanedFeatures = form.features.filter((f) => f && f.trim() !== '');
+
+    // Erstelle saubere Daten für den Request
+    const data = {
+        name: form.name,
+        slug: form.slug,
+        stripe_plan_id: form.stripe_plan_id || null,
+        price: parseFloat(form.price),
+        max_platforms: parseInt(form.max_platforms),
+        description: form.description || '',
+        features: cleanedFeatures,
+        is_active: !!form.is_active, // Boolean erzwingen
+        is_popular: !!form.is_popular, // Boolean erzwingen
+        sort_order: parseInt(form.sort_order) || 10,
+    };
 
     // DEBUGGING: Log Form-Daten in Console
-    console.log('Plan Update - Gesendete Daten:', form.data());
+    console.log('Plan Update - Gesendete Daten:', data);
 
     form.patch(`/admin/plans/${props.plan.id}`, {
+        data: data,
         onSuccess: () => {
             console.log('Plan erfolgreich aktualisiert');
         },

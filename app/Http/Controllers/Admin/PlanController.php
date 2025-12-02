@@ -134,8 +134,8 @@ class PlanController extends Controller
             'description' => 'nullable|string',
             'features' => 'nullable|array',
             'features.*' => 'string|max:255',
-            'is_active' => 'boolean',
-            'is_popular' => 'boolean', // Zeigt "Beliebt"-Badge auf Pricing-Seite
+            'is_active' => 'nullable|boolean',
+            'is_popular' => 'nullable|boolean', // Zeigt "Beliebt"-Badge auf Pricing-Seite
             'sort_order' => 'nullable|integer|min:0|max:100',
         ]);
 
@@ -144,9 +144,9 @@ class PlanController extends Controller
             return back()->with('error', 'Stripe Plan ID ist erforderlich für bezahlte Pläne.');
         }
 
-        // Default boolean values (HTML forms don't send unchecked checkboxes)
-        $validated['is_active'] = $validated['is_active'] ?? false;
-        $validated['is_popular'] = $validated['is_popular'] ?? false;
+        // Boolean Werte explizit casten (Inertia sendet manchmal Strings)
+        $validated['is_active'] = isset($validated['is_active']) ? (bool) $validated['is_active'] : false;
+        $validated['is_popular'] = isset($validated['is_popular']) ? (bool) $validated['is_popular'] : false;
 
         try {
             // Alte Werte speichern für Changelog
