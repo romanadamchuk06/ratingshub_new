@@ -203,7 +203,7 @@ class StripeWebhookController extends CashierController
     /**
      * Hilfsmethode: User anhand Stripe Customer ID finden
      */
-    protected function getUserByStripeId(string $stripeId): ?User
+    protected function getUserByStripeId($stripeId)
     {
         return User::where('stripe_id', $stripeId)->first();
     }
