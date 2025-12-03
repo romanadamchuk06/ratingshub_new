@@ -79,28 +79,21 @@ const removeFeature = (index) => {
  * Form absenden
  */
 const submit = () => {
-    // Features filtern (nur nicht-leere) und als Array senden
-    const cleanedFeatures = form.features.filter((f) => f && f.trim() !== '');
+    // Features filtern (nur nicht-leere)
+    form.features = form.features.filter((f) => f && f.trim() !== '');
 
-    // Erstelle saubere Daten für den Request
-    const data = {
-        name: form.name,
-        slug: form.slug,
-        stripe_plan_id: form.stripe_plan_id || null,
-        price: parseFloat(form.price),
-        max_platforms: parseInt(form.max_platforms),
-        description: form.description || '',
-        features: cleanedFeatures,
-        is_active: !!form.is_active, // Boolean erzwingen
-        is_popular: !!form.is_popular, // Boolean erzwingen
-        sort_order: parseInt(form.sort_order) || 10,
-    };
+    // Datentypen sicherstellen
+    form.price = parseFloat(form.price);
+    form.max_platforms = parseInt(form.max_platforms);
+    form.sort_order = parseInt(form.sort_order);
+    form.is_active = !!form.is_active;
+    form.is_popular = !!form.is_popular;
 
     // DEBUGGING: Log Form-Daten in Console
-    console.log('Plan Update - Gesendete Daten:', data);
+    console.log('Plan Update - Gesendete Daten:', form.data());
 
     form.patch(`/admin/plans/${props.plan.id}`, {
-        data: data,
+        preserveScroll: true,
         onSuccess: () => {
             console.log('Plan erfolgreich aktualisiert');
         },
