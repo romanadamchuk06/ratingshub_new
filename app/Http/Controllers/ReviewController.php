@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Review;
 use App\Models\ConnectedPlatform;
 use App\Models\ReviewResponse;
+use App\Services\GoogleMyBusinessService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -118,16 +119,22 @@ class ReviewController extends Controller
                 ->where('connected_platform_id', $connectedPlatform->id)
                 ->count();
 
-            // TODO: API-Integration je nach Provider
-            // Hier kommt die Logik für Google My Business API, Trustpilot API, etc.
-            //
-            // Beispiel für Google My Business:
-            // $service = app(GoogleMyBusinessService::class);
-            // $newReviewsCount = $service->fetchReviews($connectedPlatform);
+            // API-Integration je nach Provider
+            // Unterstützte Provider: google, trustpilot
+            $newReviewsCount = 0;
 
-            // Placeholder: Simuliere Sync (aktuell noch keine echte API-Integration)
-            // Wenn API implementiert ist, ersetze diesen Block mit echtem API-Call
-            $newReviewsCount = 0; // Wird von API zurückgegeben
+            if ($connectedPlatform->provider === 'google') {
+                // Google My Business API
+                $service = app(GoogleMyBusinessService::class);
+                $newReviewsCount = $service->fetchReviews($connectedPlatform);
+            } elseif ($connectedPlatform->provider === 'trustpilot') {
+                // TODO: Trustpilot API Integration
+                // $service = app(TrustpilotService::class);
+                // $newReviewsCount = $service->fetchReviews($connectedPlatform);
+                throw new \Exception('Trustpilot Integration noch nicht verfügbar.');
+            } else {
+                throw new \Exception('Unbekannter Provider: ' . $connectedPlatform->provider);
+            }
 
             // Zähle Reviews nach dem Sync
             $reviewsAfter = Review::where('user_id', $user->id)
@@ -211,35 +218,57 @@ class ReviewController extends Controller
             'response_text' => 'required|string|min:10|max:2000',
         ]);
 
-        // 1. Speichere Antwort in DB
-        $response = ReviewResponse::create([
-            'review_id' => $review->id,
-            'user_id' => $user->id,
-            'response_text' => $request->response_text,
-            'is_published' => false, // Noch nicht an Plattform gesendet
-        ]);
+        try {
+            // 1. Speichere Antwort in DB
+            $response = ReviewResponse::create([
+                'review_id' => $review->id,
+                'user_id' => $user->id,
+                'text' => $request->response_text,
+                'sent_at' => null, // Noch nicht an Plattform gesendet
+            ]);
 
-        // 2. TODO: Sende Antwort an Plattform-API
-        // Beispiel für Google My Business:
-        // $service = app(GoogleMyBusinessService::class);
-        // $service->replyToReview($review, $request->response_text);
-        //
-        // Wenn erfolgreich:
-        // $response->update(['is_published' => true, 'published_at' => now()]);
+            // 2. Sende Antwort an Plattform-API
+            $connectedPlatform = $review->connectedPlatform;
 
-        // 3. Aktualisiere Review-Status
-        $review->update([
-            'status' => 'responded',
-        ]);
+            if ($connectedPlatform->provider === 'google') {
+                // Google My Business API
+                $service = app(GoogleMyBusinessService::class);
+                $service->replyToReview($review, $request->response_text);
 
-        return back()->with('success', 'Deine Antwort wurde gespeichert!');
+                // Markiere als gesendet
+                $response->update(['sent_at' => now()]);
+            } elseif ($connectedPlatform->provider === 'trustpilot') {
+                // TODO: Trustpilot API Integration
+                throw new \Exception('Trustpilot Integration noch nicht verfügbar.');
+            }
+
+            // 3. Aktualisiere Review-Status
+            $review->update([
+                'status' => 'responded',
+            ]);
+
+            return back()->with('success', 'Deine Antwort wurde gesendet! ✅');
+        } catch (\Exception $e) {
+            \Log::error('Review Response fehlgeschlagen', [
+                'user_id' => $user->id,
+                'review_id' => $review->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->with('error', 'Fehler beim Senden der Antwort: ' . $e->getMessage());
+        }
     }
 
     /**
      * Löscht eine Antwort
      *
-     * WICHTIG: Wenn die Antwort bereits an die Plattform gesendet wurde,
-     * kann sie möglicherweise dort nicht mehr gelöscht werden!
+     * Flow:
+     * 1. Prüfe ob Antwort bereits an Plattform gesendet wurde (sent_at)
+     * 2. Falls ja: Versuche Antwort auch von Plattform zu löschen (Google)
+     * 3. Lösche Antwort aus DB
+     * 4. Aktualisiere Review-Status auf "pending"
+     *
+     * WICHTIG: Nicht alle Plattformen erlauben das Löschen von Antworten!
      */
     public function deleteResponse(ReviewResponse $response)
     {
@@ -250,14 +279,47 @@ class ReviewController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        // Wenn Antwort bereits published ist, warnen
-        if ($response->is_published) {
-            return back()->with('warning', 'Diese Antwort wurde bereits veröffentlicht und kann möglicherweise nicht von der Plattform gelöscht werden.');
+        try {
+            // Wenn Antwort bereits gesendet wurde, versuche sie auch von Plattform zu löschen
+            if ($response->sent_at) {
+                $review = $response->review;
+                $connectedPlatform = $review->connectedPlatform;
+
+                if ($connectedPlatform->provider === 'google') {
+                    // Versuche Antwort von Google zu löschen
+                    $service = app(GoogleMyBusinessService::class);
+
+                    try {
+                        $service->deleteReply($review);
+                    } catch (\Exception $e) {
+                        // Google erlaubt nicht immer das Löschen - log it
+                        \Log::warning('Google Reply konnte nicht gelöscht werden', [
+                            'response_id' => $response->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+            }
+
+            // Lösche Antwort aus DB
+            $review = $response->review;
+            $response->delete();
+
+            // Aktualisiere Review-Status zurück auf "pending" (falls keine anderen Antworten)
+            $hasOtherResponses = ReviewResponse::where('review_id', $review->id)->exists();
+            if (!$hasOtherResponses) {
+                $review->update(['status' => 'pending']);
+            }
+
+            return back()->with('success', 'Antwort wurde gelöscht.');
+        } catch (\Exception $e) {
+            \Log::error('Fehler beim Löschen der Antwort', [
+                'response_id' => $response->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->with('error', 'Fehler beim Löschen: ' . $e->getMessage());
         }
-
-        $response->delete();
-
-        return back()->with('success', 'Antwort wurde gelöscht.');
     }
 
     /**

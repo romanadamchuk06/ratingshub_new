@@ -119,6 +119,8 @@ Route::middleware(['auth', 'verified', 'subscribed'])->prefix('reviews')->name('
 Route::middleware(['auth', 'verified'])->prefix('platforms')->name('platforms.')->group(function () {
     Route::get('/connect/{provider}', [PlatformController::class, 'connect'])->name('connect');
     Route::get('/callback/{provider}', [PlatformController::class, 'callback'])->name('callback');
+    Route::get('/{platform}/locations', [PlatformController::class, 'getLocations'])->name('locations');
+    Route::post('/{platform}/select-location', [PlatformController::class, 'selectLocation'])->name('select-location');
     Route::delete('/{platform}', [PlatformController::class, 'disconnect'])->name('disconnect');
 });
 

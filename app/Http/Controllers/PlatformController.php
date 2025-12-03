@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ConnectedPlatform;
+use App\Services\GoogleMyBusinessService;
 use Illuminate\Http\Request;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -61,6 +62,96 @@ class PlatformController extends Controller
         } catch (\Exception $e) {
             return redirect()->route('dashboard')->with('error', 'Fehler beim Verbinden: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Holt verfügbare Locations für eine verbundene Plattform
+     *
+     * Flow (Google):
+     * 1. Hole Accounts des Users von Google API
+     * 2. Für jeden Account: Hole Locations
+     * 3. Gib alle Locations zurück
+     *
+     * Response: JSON Array von Locations
+     */
+    public function getLocations(ConnectedPlatform $platform)
+    {
+        if ($platform->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        try {
+            if ($platform->provider === 'google') {
+                $service = app(GoogleMyBusinessService::class);
+
+                // Hole alle Accounts
+                $accounts = $service->getAccounts($platform);
+                $allLocations = [];
+
+                // Für jeden Account: Hole Locations
+                foreach ($accounts as $account) {
+                    $locations = $service->getLocations($platform, $account['name']);
+
+                    // Füge Account-Info zu jeder Location hinzu
+                    foreach ($locations as $location) {
+                        $allLocations[] = [
+                            'account_name' => $account['name'],
+                            'location_name' => $location['name'],
+                            'location_display_name' => $location['locationName'] ?? $location['name'],
+                            'address' => $location['address'] ?? null,
+                        ];
+                    }
+                }
+
+                return response()->json($allLocations);
+            }
+
+            return response()->json(['error' => 'Provider not supported'], 400);
+        } catch (\Exception $e) {
+            \Log::error('Fehler beim Abrufen der Locations', [
+                'platform_id' => $platform->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Speichert die ausgewählte Location in metadata
+     *
+     * Body:
+     * {
+     *   "account_name": "accounts/123456789",
+     *   "location_name": "accounts/123/locations/456",
+     *   "location_display_name": "Mein Restaurant"
+     * }
+     */
+    public function selectLocation(ConnectedPlatform $platform, Request $request)
+    {
+        if ($platform->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $request->validate([
+            'account_name' => 'required|string',
+            'location_name' => 'required|string',
+            'location_display_name' => 'nullable|string',
+        ]);
+
+        // Aktualisiere metadata
+        $platform->update([
+            'metadata' => array_merge($platform->metadata ?? [], [
+                'account_name' => $request->account_name,
+                'location_name' => $request->location_name,
+                'location_display_name' => $request->location_display_name,
+            ]),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Location erfolgreich ausgewählt!',
+        ]);
     }
 
     /**

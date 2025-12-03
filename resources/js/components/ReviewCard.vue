@@ -244,12 +244,12 @@ const toggleReply = () => {
                     :key="response.id"
                     class="pl-6 border-l-2 border-primary/30"
                 >
-                    <p class="text-sm">{{ response.response_text }}</p>
+                    <p class="text-sm">{{ response.text }}</p>
                     <p class="text-xs text-muted-foreground mt-1">
                         {{
-                            response.published_at
-                                ? `Veröffentlicht am ${new Date(response.published_at).toLocaleDateString('de-DE')}`
-                                : 'Noch nicht veröffentlicht'
+                            response.sent_at
+                                ? `Gesendet am ${new Date(response.sent_at).toLocaleDateString('de-DE')}`
+                                : 'Noch nicht gesendet'
                         }}
                     </p>
                 </div>
