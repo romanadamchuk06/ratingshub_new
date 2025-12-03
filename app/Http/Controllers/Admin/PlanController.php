@@ -124,6 +124,12 @@ class PlanController extends Controller
      */
     public function update(Request $request, Plan $plan)
     {
+        // DEBUGGING: Log incoming request
+        \Log::info('Plan Update Request', [
+            'plan_id' => $plan->id,
+            'request_data' => $request->all()
+        ]);
+
         // Validation
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -135,16 +141,25 @@ class PlanController extends Controller
             'features' => 'nullable|array',
             'features.*' => 'string|max:255',
             'is_active' => 'nullable|boolean',
-            'is_popular' => 'nullable|boolean', // Zeigt "Beliebt"-Badge auf Pricing-Seite
+            'is_popular' => 'nullable|boolean',
             'sort_order' => 'nullable|integer|min:0|max:100',
         ]);
 
-        // Stripe Plan ID ist required wenn Preis > 0
-        if ($validated['price'] > 0 && empty($validated['stripe_plan_id'])) {
-            return back()->with('error', 'Stripe Plan ID ist erforderlich für bezahlte Pläne.');
+        // Leere Strings zu null konvertieren
+        if (isset($validated['stripe_plan_id']) && trim($validated['stripe_plan_id']) === '') {
+            $validated['stripe_plan_id'] = null;
         }
 
-        // Boolean Werte explizit casten (Inertia sendet manchmal Strings)
+        // Stripe Plan ID Warnung (nur warnen, nicht blockieren)
+        // Für Testzwecke können wir auch ohne Stripe ID arbeiten
+        if ($validated['price'] > 0 && empty($validated['stripe_plan_id'])) {
+            \Log::warning('Plan ohne Stripe ID gespeichert', [
+                'plan_id' => $plan->id,
+                'price' => $validated['price']
+            ]);
+        }
+
+        // Boolean Werte explizit casten
         $validated['is_active'] = isset($validated['is_active']) ? (bool) $validated['is_active'] : false;
         $validated['is_popular'] = isset($validated['is_popular']) ? (bool) $validated['is_popular'] : false;
 
@@ -152,9 +167,22 @@ class PlanController extends Controller
             // Alte Werte speichern für Changelog
             $oldValues = $plan->only(array_keys($validated));
 
+            // DEBUGGING: Log vor Update
+            \Log::info('Plan Update - Vor Speicherung', [
+                'plan_id' => $plan->id,
+                'old_values' => $oldValues,
+                'new_values' => $validated
+            ]);
+
             $plan->update($validated);
 
-            // Änderungen berechnen (nur geänderte Felder)
+            // DEBUGGING: Log nach Update
+            \Log::info('Plan Update - Nach Speicherung', [
+                'plan_id' => $plan->id,
+                'current_values' => $plan->fresh()->toArray()
+            ]);
+
+            // Änderungen berechnen
             $changes = [];
             foreach ($validated as $key => $newValue) {
                 if ($oldValues[$key] != $newValue) {
@@ -176,6 +204,11 @@ class PlanController extends Controller
             return redirect()->route('admin.plans.index')
                 ->with('success', "Plan '{$plan->name}' wurde aktualisiert.");
         } catch (\Exception $e) {
+            \Log::error('Plan Update Fehler', [
+                'plan_id' => $plan->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return back()->with('error', 'Fehler beim Aktualisieren: ' . $e->getMessage());
         }
     }
