@@ -28,6 +28,7 @@ class User extends Authenticatable
         'is_admin',
         'plan_id',
         'trial_ends_at',
+        'ends_grace_period_at',
     ];
 
     /**
@@ -55,6 +56,7 @@ class User extends Authenticatable
             'two_factor_confirmed_at' => 'datetime',
             'is_admin' => 'boolean',
             'trial_ends_at' => 'datetime',
+            'ends_grace_period_at' => 'datetime',
         ];
     }
 

@@ -37,13 +37,16 @@ class EnsureUserIsSubscribed
         }
 
         // Prüfe ob User ein aktives Abo hat
-        // WICHTIG: Wir prüfen zwei Systeme:
+        // WICHTIG: Wir prüfen drei Systeme:
         // 1. Plan-basiert: user.plan_id (direktes Plan-Assignment)
         // 2. Cashier-basiert: subscriptions Tabelle (Stripe/Paddle Integration)
+        // 3. Trial-Phase: user.trial_ends_at in der Zukunft
+        // 4. Grace Period: user.ends_grace_period_at in der Zukunft
         $hasAccess = $user && (
             $user->plan_id !== null ||              // User hat direkt zugewiesenen Plan
             $user->subscribed($subscription) ||      // User hat Cashier Subscription
-            $user->onTrial()                         // User ist in Trial-Phase
+            $this->hasValidTrial($user) ||           // User ist in Trial-Phase
+            $this->hasValidGracePeriod($user)        // User ist in Grace Period
         );
 
         if (!$hasAccess) {
@@ -53,5 +56,32 @@ class EnsureUserIsSubscribed
         }
 
         return $next($request);
+    }
+
+    /**
+     * Prüft ob User eine gültige Trial-Phase hat
+     */
+    protected function hasValidTrial($user): bool
+    {
+        if (!$user->trial_ends_at) {
+            return false;
+        }
+
+        return $user->trial_ends_at->isFuture();
+    }
+
+    /**
+     * Prüft ob User eine gültige Grace Period hat
+     *
+     * Grace Period = Zeit nach fehlgeschlagener Zahlung
+     * User hat noch Zugriff, aber wird gewarnt
+     */
+    protected function hasValidGracePeriod($user): bool
+    {
+        if (!$user->ends_grace_period_at) {
+            return false;
+        }
+
+        return $user->ends_grace_period_at->isFuture();
     }
 }

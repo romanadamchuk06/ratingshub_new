@@ -9,18 +9,21 @@ use Laravel\Fortify\Features;
  * STRIPE WEBHOOKS
  * ===============
  *
- * Laravel Cashier registriert automatisch die Webhook-Route:
- * POST /stripe/webhook
+ * Custom Webhook Handler: App\Http\Controllers\StripeWebhookController
+ * POST /stripe/webhook (automatisch von Cashier registriert)
  *
  * Stripe sendet Events an diese Route:
  * - invoice.payment_succeeded → Zahlung erfolgreich
- * - invoice.payment_failed → Zahlung fehlgeschlagen
+ * - invoice.payment_failed → Zahlung fehlgeschlagen (Grace Period starten)
  * - customer.subscription.updated → Abo geändert
- * - customer.subscription.deleted → Abo gekündigt
+ * - customer.subscription.deleted → Abo gekündigt (Benachrichtigung senden)
  *
  * Die Route ist automatisch von CSRF-Protection ausgenommen.
  * Cashier aktualisiert automatisch die `subscriptions` Tabelle.
  */
+Route::post('/stripe/webhook', [App\Http\Controllers\StripeWebhookController::class, 'handleWebhook'])
+    ->name('cashier.webhook')
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::get('/', function () {
     // Aktive Pläne aus der Datenbank laden, sortiert nach sort_order
