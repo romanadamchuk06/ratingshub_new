@@ -1,30 +1,23 @@
 <script setup>
 /**
- * LOCATION SELECTOR (MULTI-SELECT)
- * ==================================
+ * LOCATION SELECTOR
+ * =================
  *
- * Wiederverwendbare Komponente für Standort-Auswahl.
+ * Zeigt Google My Business Locations zum Auswählen an.
  *
  * Features:
- * - Multi-Select mit Checkboxen
- * - "Alle auswählen" Option
- * - Zeigt Anzahl ausgewählter Standorte
- * - Speichert Auswahl in URL (filter persistence)
+ * - Lädt verfügbare Locations von verbundenen Google-Plattformen
+ * - Single-Select: User wählt EINE Location aus
+ * - Speichert Auswahl in Platform.metadata
  *
- * Verwendung:
- * -----------
- * <LocationSelector
- *   :locations="connectedPlatforms"
- *   @change="handleLocationChange"
- * />
- *
- * WARUM?
- * - User haben oft mehrere Standorte (z.B. Filialen)
- * - Bewertungen sollen pro Standort filterbar sein
- * - Dashboard-Stats sollen pro Standort angezeigt werden
+ * Flow:
+ * 1. Component mounted → Lade Locations via API
+ * 2. User wählt Location
+ * 3. POST zu /platforms/{id}/select-location
+ * 4. Location wird in metadata gespeichert
  */
 
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { router } from '@inertiajs/vue3';
 import {
     DropdownMenu,
@@ -34,153 +27,136 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, ChevronDown, Check } from 'lucide-vue-next';
+import { MapPin, ChevronDown, Check, Loader2, AlertCircle } from 'lucide-vue-next';
 
 const props = defineProps({
     /**
-     * Liste der verbundenen Plattformen/Standorte
-     * Format: [{ id: 1, provider: 'google', metadata: { name: 'Standort München' } }]
+     * Liste der verbundenen Plattformen
+     * Format: [{ id: 1, provider: 'google', metadata: { location_name: '...', location_display_name: '...' } }]
      */
     locations: {
         type: Array,
         required: true,
     },
-
-    /**
-     * Vorausgewählte Location IDs (z.B. aus URL)
-     */
-    selectedIds: {
-        type: Array,
-        default: () => [],
-    },
-
-    /**
-     * Auto-Update URL beim Ändern?
-     */
-    autoUpdate: {
-        type: Boolean,
-        default: true,
-    },
 });
 
-const emit = defineEmits(['change']);
-
-// Aktuell ausgewählte Location IDs
-const selected = ref([...props.selectedIds]);
-
-// Wenn keine Vorauswahl, wähle alle
-if (selected.value.length === 0 && props.locations.length > 0) {
-    selected.value = props.locations.map(loc => loc.id);
-}
+// State
+const availableLocations = ref([]); // Alle verfügbaren Google Locations
+const loading = ref(false);
+const error = ref(null);
+const saving = ref(false);
 
 /**
- * Sind alle Locations ausgewählt?
+ * Findet die erste Google-Plattform ohne ausgewählte Location
+ * oder die erste Google-Plattform generell
  */
-const allSelected = computed(() => {
-    return selected.value.length === props.locations.length;
+const googlePlatform = computed(() => {
+    return props.locations.find(loc => loc.provider === 'google');
 });
 
 /**
- * Label für den Button
+ * Hat die Plattform bereits eine Location ausgewählt?
+ */
+const hasSelectedLocation = computed(() => {
+    return googlePlatform.value?.metadata?.location_name !== undefined;
+});
+
+/**
+ * Display Name der ausgewählten Location
+ */
+const selectedLocationName = computed(() => {
+    if (!hasSelectedLocation.value) {
+        return 'Standort auswählen';
+    }
+    return googlePlatform.value.metadata.location_display_name || 'Unbekannte Location';
+});
+
+/**
+ * Button Label
  */
 const buttonLabel = computed(() => {
-    if (selected.value.length === 0) {
-        return 'Keine Standorte';
+    if (loading.value) {
+        return 'Lade...';
     }
-    if (allSelected.value) {
-        return `Alle Standorte (${props.locations.length})`;
+    if (error.value) {
+        return 'Fehler';
     }
-    return `${selected.value.length} ${selected.value.length === 1 ? 'Standort' : 'Standorte'}`;
+    return selectedLocationName.value;
 });
 
 /**
- * Standort-Name extrahieren
+ * Lädt verfügbare Google Locations
  */
-const getLocationName = (location) => {
-    // Versuche aus metadata.name
-    if (location.metadata?.name) {
-        return location.metadata.name;
-    }
-    // Fallback: Provider + ID
-    return `${location.provider} (${location.id})`;
-};
-
-/**
- * Toggle "Alle auswählen"
- */
-const toggleAll = () => {
-    if (allSelected.value) {
-        // Alle abwählen
-        selected.value = [];
-    } else {
-        // Alle auswählen
-        selected.value = props.locations.map(loc => loc.id);
-    }
-    handleChange();
-};
-
-/**
- * Toggle einzelne Location
- */
-const toggleLocation = (locationId) => {
-    const index = selected.value.indexOf(locationId);
-    if (index > -1) {
-        selected.value.splice(index, 1);
-    } else {
-        selected.value.push(locationId);
-    }
-    handleChange();
-};
-
-/**
- * Check ob Location ausgewählt ist
- * HINWEIS: Wir verwenden jetzt selected.includes() direkt im Template
- * für bessere Reaktivität
- */
-
-/**
- * Änderung behandeln
- */
-const handleChange = () => {
-    emit('change', selected.value);
-
-    // Auto-Update URL?
-    if (props.autoUpdate) {
-        updateUrl();
-    }
-};
-
-/**
- * URL mit Auswahl aktualisieren
- */
-const updateUrl = () => {
-    const currentUrl = new URL(window.location.href);
-    const params = new URLSearchParams(currentUrl.search);
-
-    if (selected.value.length === 0 || allSelected.value) {
-        // Keine oder alle: Parameter entfernen
-        params.delete('locations');
-    } else {
-        // Spezifische Auswahl: Als Komma-separierte Liste
-        params.set('locations', selected.value.join(','));
+const loadLocations = async () => {
+    if (!googlePlatform.value) {
+        return;
     }
 
-    // Navigate mit preserveState & preserveScroll
-    router.get(
-        currentUrl.pathname + '?' + params.toString(),
-        {},
-        {
-            preserveState: true,
-            preserveScroll: true,
-            only: ['stats', 'reviews'], // Nur relevante Props neu laden
+    loading.value = true;
+    error.value = null;
+
+    try {
+        const response = await fetch(`/platforms/${googlePlatform.value.id}/locations`);
+
+        if (!response.ok) {
+            throw new Error('Fehler beim Laden der Locations');
         }
-    );
+
+        const data = await response.json();
+        availableLocations.value = data;
+    } catch (e) {
+        error.value = e.message;
+        console.error('Fehler beim Laden der Locations:', e);
+    } finally {
+        loading.value = false;
+    }
 };
 
-// Watch für externe Änderungen (z.B. URL-Change)
-watch(() => props.selectedIds, (newIds) => {
-    if (newIds.length > 0) {
-        selected.value = [...newIds];
+/**
+ * Wählt eine Location aus und speichert sie
+ */
+const selectLocation = async (location) => {
+    if (!googlePlatform.value) {
+        return;
+    }
+
+    saving.value = true;
+    error.value = null;
+
+    try {
+        const response = await fetch(`/platforms/${googlePlatform.value.id}/select-location`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            },
+            body: JSON.stringify({
+                account_name: location.account_name,
+                location_name: location.location_name,
+                location_display_name: location.location_display_name,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Fehler beim Speichern der Location');
+        }
+
+        // Seite neu laden um neue metadata zu bekommen
+        router.reload({
+            preserveScroll: true,
+        });
+    } catch (e) {
+        error.value = e.message;
+        console.error('Fehler beim Speichern der Location:', e);
+    } finally {
+        saving.value = false;
+    }
+};
+
+// Load locations on mount (wenn noch keine ausgewählt)
+onMounted(() => {
+    if (googlePlatform.value && !hasSelectedLocation.value) {
+        loadLocations();
     }
 });
 </script>
@@ -188,70 +164,93 @@ watch(() => props.selectedIds, (newIds) => {
 <template>
     <DropdownMenu>
         <DropdownMenuTrigger as-child>
-            <Button variant="outline" class="min-w-[200px] justify-between">
+            <Button
+                variant="outline"
+                class="min-w-[200px] justify-between"
+                :disabled="!googlePlatform"
+            >
                 <div class="flex items-center gap-2">
-                    <MapPin class="h-4 w-4" />
+                    <Loader2 v-if="loading || saving" class="h-4 w-4 animate-spin" />
+                    <AlertCircle v-else-if="error" class="h-4 w-4 text-destructive" />
+                    <MapPin v-else class="h-4 w-4" />
                     <span>{{ buttonLabel }}</span>
                 </div>
                 <ChevronDown class="ml-2 h-4 w-4 opacity-50" />
             </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent class="w-64 p-0" align="start">
-            <!-- Alle auswählen -->
-            <!--
-                WICHTIG:
-                - Verwenden eigene visuelle Checkbox (kein pointer-events Problem)
-                - @click.stop verhindert dass Dropdown schließt
-            -->
-            <div
-                class="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-accent"
-                @click.stop="toggleAll"
-            >
-                <!-- Visuelle Checkbox (kein reka-ui Component) -->
-                <div
-                    class="size-4 shrink-0 rounded-[4px] border border-input shadow-xs flex items-center justify-center transition-colors"
-                    :class="allSelected ? 'bg-primary border-primary text-primary-foreground' : ''"
-                >
-                    <Check v-if="allSelected" class="size-3.5" />
-                </div>
-                <span class="flex-1 font-medium">Alle Standorte</span>
-                <Badge v-if="locations.length > 0" variant="secondary">
-                    {{ locations.length }}
-                </Badge>
+        <DropdownMenuContent class="w-80 p-0" align="start">
+            <!-- Loading State -->
+            <div v-if="loading" class="flex items-center gap-2 px-3 py-6">
+                <Loader2 class="h-4 w-4 animate-spin" />
+                <span class="text-sm text-muted-foreground">Lade verfügbare Standorte...</span>
             </div>
 
-            <DropdownMenuSeparator v-if="locations.length > 0" />
+            <!-- Error State -->
+            <div v-else-if="error" class="px-3 py-4">
+                <div class="flex items-center gap-2 text-destructive mb-2">
+                    <AlertCircle class="h-4 w-4" />
+                    <span class="text-sm font-medium">{{ error }}</span>
+                </div>
+                <Button @click="loadLocations" variant="outline" size="sm" class="w-full">
+                    Erneut versuchen
+                </Button>
+            </div>
 
-            <!-- Einzelne Locations -->
-            <div class="max-h-64 overflow-y-auto">
+            <!-- Locations List -->
+            <div v-else-if="availableLocations.length > 0" class="max-h-96 overflow-y-auto">
                 <div
-                    v-for="location in locations"
-                    :key="location.id"
-                    class="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-accent"
-                    @click.stop="toggleLocation(location.id)"
+                    v-for="location in availableLocations"
+                    :key="location.location_name"
+                    class="flex cursor-pointer items-start gap-3 px-3 py-3 hover:bg-accent transition-colors"
+                    :class="hasSelectedLocation && googlePlatform.metadata.location_name === location.location_name ? 'bg-accent' : ''"
+                    @click="selectLocation(location)"
                 >
-                    <!-- Visuelle Checkbox (einfaches div, kein Component) -->
-                    <div
-                        class="size-4 shrink-0 rounded-[4px] border border-input shadow-xs flex items-center justify-center transition-colors"
-                        :class="selected.includes(location.id) ? 'bg-primary border-primary text-primary-foreground' : ''"
-                    >
-                        <Check v-if="selected.includes(location.id)" class="size-3.5" />
+                    <!-- Check Icon wenn ausgewählt -->
+                    <div class="flex items-center justify-center w-5 h-5 mt-0.5">
+                        <Check
+                            v-if="hasSelectedLocation && googlePlatform.metadata.location_name === location.location_name"
+                            class="h-4 w-4 text-primary"
+                        />
                     </div>
-                    <div class="flex flex-col gap-0.5">
-                        <span class="text-sm font-medium">{{ getLocationName(location) }}</span>
-                        <span class="text-xs text-muted-foreground capitalize">
-                            {{ location.provider.replace('_', ' ') }}
-                        </span>
+
+                    <!-- Location Info -->
+                    <div class="flex-1 min-w-0">
+                        <div class="font-medium text-sm">{{ location.location_display_name }}</div>
+                        <div v-if="location.address" class="text-xs text-muted-foreground mt-0.5">
+                            {{ location.address.addressLines?.join(', ') || '' }}
+                            {{ location.address.postalCode ? location.address.postalCode : '' }}
+                            {{ location.address.locality ? location.address.locality : '' }}
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Empty State -->
-            <div
-                v-if="locations.length === 0"
-                class="px-3 py-6 text-center text-sm text-muted-foreground"
-            >
-                Keine Standorte verbunden
+            <div v-else-if="!hasSelectedLocation" class="px-3 py-6">
+                <div class="text-center">
+                    <MapPin class="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p class="text-sm text-muted-foreground">
+                        Keine Google My Business Standorte gefunden.
+                    </p>
+                    <a
+                        href="https://business.google.com"
+                        target="_blank"
+                        class="inline-block mt-3 text-sm font-medium text-primary hover:underline"
+                    >
+                        Google My Business öffnen →
+                    </a>
+                </div>
+            </div>
+
+            <!-- Bereits ausgewählt (wenn Dropdown geöffnet und Location gesetzt) -->
+            <div v-else class="px-3 py-4">
+                <div class="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
+                    <Check class="h-4 w-4" />
+                    <span class="text-sm font-medium">Standort ausgewählt</span>
+                </div>
+                <Button @click="loadLocations" variant="outline" size="sm" class="w-full">
+                    Anderen Standort wählen
+                </Button>
             </div>
         </DropdownMenuContent>
     </DropdownMenu>

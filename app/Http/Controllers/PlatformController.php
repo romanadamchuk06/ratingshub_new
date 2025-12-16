@@ -93,12 +93,13 @@ class PlatformController extends Controller
                     $locations = $service->getLocations($platform, $account['name']);
 
                     // Füge Account-Info zu jeder Location hinzu
+                    // Business Information API v1 nutzt 'title' statt 'locationName'
                     foreach ($locations as $location) {
                         $allLocations[] = [
                             'account_name' => $account['name'],
                             'location_name' => $location['name'],
-                            'location_display_name' => $location['locationName'] ?? $location['name'],
-                            'address' => $location['address'] ?? null,
+                            'location_display_name' => $location['title'] ?? $location['locationName'] ?? $location['name'],
+                            'address' => $location['storefrontAddress'] ?? $location['address'] ?? null,
                         ];
                     }
                 }

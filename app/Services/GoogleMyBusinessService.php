@@ -56,9 +56,11 @@ use Illuminate\Support\Facades\Log;
 class GoogleMyBusinessService
 {
     /**
-     * API Base URL
+     * API Base URLs (neue separate APIs ab 2021)
      */
-    private const API_BASE_URL = 'https://mybusiness.googleapis.com/v4';
+    private const ACCOUNT_MANAGEMENT_API = 'https://mybusinessaccountmanagement.googleapis.com/v1';
+    private const BUSINESS_INFO_API = 'https://mybusinessbusinessinformation.googleapis.com/v1';
+    private const REVIEWS_API = 'https://mybusiness.googleapis.com/v4'; // Reviews nutzt noch v4
 
     /**
      * Holt Access Token und refreshed ihn falls nötig
@@ -170,8 +172,9 @@ class GoogleMyBusinessService
     {
         $token = $this->getAccessToken($platform);
 
+        // Neue Account Management API verwenden
         $response = Http::withToken($token)
-            ->get(self::API_BASE_URL . '/accounts');
+            ->get(self::ACCOUNT_MANAGEMENT_API . '/accounts');
 
         if (!$response->successful()) {
             Log::error('Google Accounts abrufen fehlgeschlagen', [
@@ -215,8 +218,13 @@ class GoogleMyBusinessService
     {
         $token = $this->getAccessToken($platform);
 
+        // Neue Business Information API (v1) benötigt read_mask Parameter
+        // read_mask gibt an welche Felder wir lesen wollen
         $response = Http::withToken($token)
-            ->get(self::API_BASE_URL . "/{$accountName}/locations");
+            ->get(self::BUSINESS_INFO_API . "/{$accountName}/locations", [
+                'readMask' => 'name,title,storefrontAddress',
+                'pageSize' => 100, // Maximal 100 Locations pro Request
+            ]);
 
         if (!$response->successful()) {
             Log::error('Google Locations abrufen fehlgeschlagen', [
@@ -274,6 +282,18 @@ class GoogleMyBusinessService
             throw new \Exception('Location Name nicht gefunden. Bitte in metadata speichern.');
         }
 
+        // WICHTIG: Reviews API benötigt vollständigen Pfad mit Account
+        // Neue Business Information API gibt nur "locations/XXX" zurück
+        // Reviews API braucht aber "accounts/YYY/locations/XXX"
+        $accountName = $platform->metadata['account_name'] ?? null;
+
+        if (!$accountName) {
+            throw new \Exception('Account Name nicht gefunden. Bitte Location neu auswählen.');
+        }
+
+        // Vollständigen Location-Pfad bauen
+        $fullLocationPath = $accountName . '/' . $locationName;
+
         $token = $this->getAccessToken($platform);
         $newReviewsCount = 0;
 
@@ -281,7 +301,7 @@ class GoogleMyBusinessService
         $pageToken = null;
 
         do {
-            $url = self::API_BASE_URL . "/{$locationName}/reviews";
+            $url = self::REVIEWS_API . "/{$fullLocationPath}/reviews";
 
             if ($pageToken) {
                 $url .= "?pageToken={$pageToken}";
@@ -394,12 +414,16 @@ class GoogleMyBusinessService
 
         // Location Name aus metadata
         $locationName = $platform->metadata['location_name'] ?? null;
+        $accountName = $platform->metadata['account_name'] ?? null;
 
-        if (!$locationName) {
-            throw new \Exception('Location Name nicht gefunden.');
+        if (!$locationName || !$accountName) {
+            throw new \Exception('Location oder Account Name nicht gefunden.');
         }
 
-        $url = self::API_BASE_URL . "/{$locationName}/reviews/{$review->provider_review_id}/reply";
+        // Vollständigen Pfad bauen
+        $fullLocationPath = $accountName . '/' . $locationName;
+
+        $url = self::REVIEWS_API . "/{$fullLocationPath}/reviews/{$review->provider_review_id}/reply";
 
         $response = Http::withToken($token)
             ->put($url, [
@@ -443,12 +467,16 @@ class GoogleMyBusinessService
         $token = $this->getAccessToken($platform);
 
         $locationName = $platform->metadata['location_name'] ?? null;
+        $accountName = $platform->metadata['account_name'] ?? null;
 
-        if (!$locationName) {
-            throw new \Exception('Location Name nicht gefunden.');
+        if (!$locationName || !$accountName) {
+            throw new \Exception('Location oder Account Name nicht gefunden.');
         }
 
-        $url = self::API_BASE_URL . "/{$locationName}/reviews/{$review->provider_review_id}/reply";
+        // Vollständigen Pfad bauen
+        $fullLocationPath = $accountName . '/' . $locationName;
+
+        $url = self::REVIEWS_API . "/{$fullLocationPath}/reviews/{$review->provider_review_id}/reply";
 
         $response = Http::withToken($token)->delete($url);
 

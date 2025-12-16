@@ -1,12 +1,14 @@
 <script setup>
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, usePage, Link } from '@inertiajs/vue3';
 import { ref, onMounted, computed } from 'vue';
 import ConnectPlatformModal from '../components/ConnectPlatformModal.vue';
 import StatsCard from '../components/StatsCard.vue';
 import EmptyState from '../components/EmptyState.vue';
 import LocationSelector from '../components/LocationSelector.vue';
-import { Star, TrendingUp, MessageSquare, Award, Link2 } from 'lucide-vue-next';
+import ReviewCard from '../components/ReviewCard.vue';
+import { Button } from '@/components/ui/button';
+import { Star, TrendingUp, MessageSquare, Award, Link2, ArrowRight } from 'lucide-vue-next';
 
 const props = defineProps({
     connectedPlatforms: {
@@ -14,6 +16,19 @@ const props = defineProps({
         default: () => [],
     },
     selectedLocationIds: {
+        type: Array,
+        default: () => [],
+    },
+    stats: {
+        type: Object,
+        default: () => ({
+            totalReviews: 0,
+            averageRating: null,
+            newThisWeek: 0,
+            pendingReviews: 0,
+        }),
+    },
+    recentReviews: {
         type: Array,
         default: () => [],
     },
@@ -67,27 +82,25 @@ const closeModal = () => {
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatsCard
                     title="Gesamtbewertungen"
-                    :value="hasPlatformConnected ? '0' : '-'"
+                    :value="hasPlatformConnected ? stats.totalReviews.toString() : '-'"
                     :icon="Star"
                     :loading="false"
                 />
                 <StatsCard
                     title="Durchschnitt"
-                    :value="hasPlatformConnected ? '-' : '-'"
+                    :value="hasPlatformConnected && stats.averageRating ? `${stats.averageRating} ⭐` : '-'"
                     :icon="Award"
                     :loading="false"
                 />
                 <StatsCard
                     title="Neue diese Woche"
-                    :value="hasPlatformConnected ? '0' : '-'"
+                    :value="hasPlatformConnected ? stats.newThisWeek.toString() : '-'"
                     :icon="TrendingUp"
-                    trend="up"
-                    trendValue="+0%"
                     :loading="false"
                 />
                 <StatsCard
                     title="Zu beantworten"
-                    :value="hasPlatformConnected ? '0' : '-'"
+                    :value="hasPlatformConnected ? stats.pendingReviews.toString() : '-'"
                     :icon="MessageSquare"
                     :loading="false"
                 />
@@ -95,10 +108,19 @@ const closeModal = () => {
 
             <!-- Main Content Area -->
             <div class="rounded-xl border bg-card">
-                <div class="border-b p-6">
+                <div class="border-b p-6 flex items-center justify-between">
                     <h2 class="text-lg font-semibold">Neueste Bewertungen</h2>
+                    <Link
+                        v-if="hasPlatformConnected && recentReviews.length > 0"
+                        href="/reviews"
+                        class="text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                        Alle anzeigen
+                        <ArrowRight class="h-4 w-4" />
+                    </Link>
                 </div>
                 <div class="p-6">
+                    <!-- Keine Plattform verbunden -->
                     <EmptyState
                         v-if="!hasPlatformConnected"
                         :icon="Link2"
@@ -107,12 +129,31 @@ const closeModal = () => {
                         actionText="Plattform verbinden"
                         actionHref="/settings/platforms"
                     />
+                    <!-- Plattform verbunden, aber keine Reviews -->
                     <EmptyState
-                        v-else
+                        v-else-if="recentReviews.length === 0"
                         :icon="Star"
                         title="Noch keine Bewertungen"
-                        description="Sobald du Bewertungen erhältst, werden sie hier angezeigt."
+                        description="Synchronisiere deine Bewertungen, um sie hier zu sehen."
+                        actionText="Jetzt synchronisieren"
+                        actionHref="/reviews"
                     />
+                    <!-- Reviews Liste -->
+                    <div v-else class="space-y-4">
+                        <ReviewCard
+                            v-for="review in recentReviews"
+                            :key="review.id"
+                            :review="review"
+                        />
+                        <div v-if="stats.totalReviews > 5" class="pt-4 border-t text-center">
+                            <Link href="/reviews">
+                                <Button variant="outline">
+                                    Alle {{ stats.totalReviews }} Bewertungen anzeigen
+                                    <ArrowRight class="ml-2 h-4 w-4" />
+                                </Button>
+                            </Link>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

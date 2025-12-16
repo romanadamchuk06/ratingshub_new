@@ -74,9 +74,49 @@ Route::middleware(['auth', 'verified', 'subscribed'])->group(function () {
             $selectedLocationIds = array_map('intval', explode(',', request('locations')));
         }
 
+        // Review-Statistiken berechnen
+        // Query Builder für Reviews (mit optionalem Location-Filter)
+        $reviewsQuery = \App\Models\Review::where('user_id', $user->id);
+
+        // Filter nach ausgewählten Locations (falls vorhanden)
+        if (!empty($selectedLocationIds)) {
+            $reviewsQuery->whereIn('connected_platform_id', $selectedLocationIds);
+        }
+
+        // Gesamtbewertungen
+        $totalReviews = (clone $reviewsQuery)->count();
+
+        // Durchschnittsbewertung (z.B. 4.5)
+        $averageRating = (clone $reviewsQuery)->avg('rating');
+        $averageRating = $averageRating ? round($averageRating, 1) : null;
+
+        // Neue Reviews diese Woche (letzte 7 Tage)
+        $newThisWeek = (clone $reviewsQuery)
+            ->where('review_date', '>=', now()->subDays(7))
+            ->count();
+
+        // Reviews die noch beantwortet werden müssen (Status: pending)
+        $pendingReviews = (clone $reviewsQuery)
+            ->where('status', 'pending')
+            ->count();
+
+        // Neueste 5 Reviews für die Liste
+        $recentReviews = (clone $reviewsQuery)
+            ->with(['connectedPlatform'])
+            ->orderBy('review_date', 'desc')
+            ->limit(5)
+            ->get();
+
         return Inertia::render('Dashboard', [
             'connectedPlatforms' => $connectedPlatforms,
             'selectedLocationIds' => $selectedLocationIds,
+            'stats' => [
+                'totalReviews' => $totalReviews,
+                'averageRating' => $averageRating,
+                'newThisWeek' => $newThisWeek,
+                'pendingReviews' => $pendingReviews,
+            ],
+            'recentReviews' => $recentReviews,
         ]);
     })->name('dashboard');
 
