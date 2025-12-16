@@ -14,6 +14,7 @@ class Plan extends Model
         'slug',
         'stripe_plan_id',
         'price',
+        'billing_interval', // 'monthly' oder 'yearly'
         'max_platforms',
         'is_active',
         'is_popular', // Zeigt "Beliebt"-Badge auf Pricing-Seite
@@ -39,8 +40,31 @@ class Plan extends Model
         return $this->price == 0;
     }
 
+    public function isYearly(): bool
+    {
+        return $this->billing_interval === 'yearly';
+    }
+
+    public function isMonthly(): bool
+    {
+        return $this->billing_interval === 'monthly';
+    }
+
     public function getFormattedPriceAttribute(): string
     {
-        return number_format($this->price, 2) . ' €';
+        $interval = $this->isYearly() ? '/Jahr' : '/Monat';
+        return number_format($this->price, 2) . ' €' . $interval;
+    }
+
+    /**
+     * Berechnet den monatlichen Preis für Vergleich
+     * Beispiel: Jährlich 119.99€ → monatlich 10€
+     */
+    public function getMonthlyEquivalentAttribute(): float
+    {
+        if ($this->isYearly()) {
+            return round($this->price / 12, 2);
+        }
+        return (float) $this->price;
     }
 }

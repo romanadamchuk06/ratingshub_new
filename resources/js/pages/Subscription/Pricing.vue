@@ -1,6 +1,17 @@
 <script setup>
+/**
+ * Pricing Page mit monatlich/jährlich Toggle
+ *
+ * Features:
+ * - Toggle zwischen monatlicher und jährlicher Abrechnung
+ * - Gruppierung von Plänen nach billing_interval
+ * - Anzeige der Ersparnis bei jährlicher Zahlung
+ * - Free-Plan wird bei beiden Ansichten angezeigt
+ */
+
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
+import { ref, computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,17 +28,50 @@ const props = defineProps({
     },
 });
 
+// Billing Interval State ('monthly' oder 'yearly')
+const selectedInterval = ref('monthly');
+
+/**
+ * Filtert Pläne nach ausgewähltem Intervall
+ * Free-Plan wird immer angezeigt (ist immer 'monthly')
+ */
+const filteredPlans = computed(() => {
+    return props.plans.filter((plan) => {
+        return plan.billing_interval === selectedInterval.value;
+    });
+});
+
 const getPlanIcon = (slug) => {
-    const icons = {
-        free: Zap,
-        'pro-single': TrendingUp,
-        unlimited: Rocket,
-    };
-    return icons[slug] || Zap;
+    // Slug kann jetzt -monthly oder -yearly Suffix haben, deshalb prüfen wir nur den Anfang
+    if (slug.startsWith('free')) return Zap;
+    if (slug.startsWith('basic')) return Zap;
+    if (slug.startsWith('pro')) return TrendingUp;
+    if (slug.startsWith('enterprise')) return Rocket;
+    return Zap;
 };
 
 const isCurrentPlan = (plan) => {
     return props.currentPlan?.id === plan.id;
+};
+
+/**
+ * Berechnet die monatliche Ersparnis für jährliche Pläne
+ * Beispiel: Jährlich 299.99€ → monatlich 25€ statt 29.99€ → Ersparnis 5€/Monat
+ */
+const getYearlySavings = (plan) => {
+    if (plan.billing_interval !== 'yearly') return null;
+
+    const monthlyEquivalent = Math.round(plan.price / 12);
+
+    // Finde den entsprechenden monatlichen Plan
+    const monthlyPlan = props.plans.find(
+        (p) => p.name === plan.name && p.billing_interval === 'monthly'
+    );
+
+    if (!monthlyPlan) return null;
+
+    const savings = monthlyPlan.price - monthlyEquivalent;
+    return savings > 0 ? Math.round(savings) : null;
 };
 </script>
 
@@ -39,19 +83,56 @@ const isCurrentPlan = (plan) => {
     ]">
         <div class="space-y-8 p-4 md:p-6 lg:p-8">
             <!-- Header -->
-            <div class="text-center">
-                <h1 class="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-                    Einfache, transparente Preise
-                </h1>
-                <p class="mx-auto max-w-2xl text-lg text-muted-foreground">
-                    Wähle den Plan, der zu dir passt. Jederzeit kündbar.
-                </p>
+            <div class="text-center space-y-6">
+                <div>
+                    <h1 class="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
+                        Einfache, transparente Preise
+                    </h1>
+                    <p class="mx-auto max-w-2xl text-lg text-muted-foreground">
+                        Wähle den Plan, der zu dir passt. Jederzeit kündbar.
+                    </p>
+                </div>
+
+                <!-- Billing Interval Toggle -->
+                <div class="flex items-center justify-center gap-4">
+                    <span
+                        :class="[
+                            'text-sm font-medium transition-colors',
+                            selectedInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground',
+                        ]"
+                    >
+                        Monatlich
+                    </span>
+                    <button
+                        @click="selectedInterval = selectedInterval === 'monthly' ? 'yearly' : 'monthly'"
+                        :class="[
+                            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                            selectedInterval === 'yearly' ? 'bg-primary' : 'bg-muted',
+                        ]"
+                    >
+                        <span
+                            :class="[
+                                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                                selectedInterval === 'yearly' ? 'translate-x-6' : 'translate-x-1',
+                            ]"
+                        />
+                    </button>
+                    <span
+                        :class="[
+                            'text-sm font-medium transition-colors',
+                            selectedInterval === 'yearly' ? 'text-foreground' : 'text-muted-foreground',
+                        ]"
+                    >
+                        Jährlich
+                        <Badge variant="secondary" class="ml-2 text-xs">2 Monate gratis</Badge>
+                    </span>
+                </div>
             </div>
 
             <!-- Pricing Cards -->
             <div class="mx-auto grid max-w-5xl gap-6 md:grid-cols-3">
                 <Card
-                    v-for="plan in plans"
+                    v-for="plan in filteredPlans"
                     :key="plan.id"
                     :class="[
                         'relative flex flex-col',
@@ -89,16 +170,32 @@ const isCurrentPlan = (plan) => {
 
                         <!-- Price -->
                         <div class="mt-4">
-                            <div v-if="Number(plan.price) > 0" class="flex items-baseline justify-center gap-1">
-                                <span class="text-4xl font-bold">
-                                    {{ Math.round(Number(plan.price)) }} €
-                                </span>
-                                <span class="text-muted-foreground">/Monat</span>
-                            </div>
-                            <div v-else class="flex items-baseline justify-center gap-1">
+                            <!-- Free Plan -->
+                            <div v-if="Number(plan.price) === 0" class="flex items-baseline justify-center gap-1">
                                 <span class="text-4xl font-bold">
                                     Kostenlos
                                 </span>
+                            </div>
+                            <!-- Paid Plans -->
+                            <div v-else class="space-y-2">
+                                <div class="flex items-baseline justify-center gap-1">
+                                    <span class="text-4xl font-bold">
+                                        {{ Math.round(Number(plan.price)) }} €
+                                    </span>
+                                    <span class="text-muted-foreground">
+                                        {{ plan.billing_interval === 'yearly' ? '/Jahr' : '/Monat' }}
+                                    </span>
+                                </div>
+                                <!-- Monatlicher Äquivalent bei jährlichen Plänen -->
+                                <div v-if="plan.billing_interval === 'yearly'" class="text-sm text-muted-foreground">
+                                    {{ Math.round(plan.price / 12) }}€/Monat
+                                </div>
+                                <!-- Ersparnis-Badge bei jährlichen Plänen -->
+                                <div v-if="getYearlySavings(plan)" class="flex justify-center">
+                                    <Badge variant="secondary" class="text-xs">
+                                        Spare {{ getYearlySavings(plan) }}€/Monat
+                                    </Badge>
+                                </div>
                             </div>
                             <p v-if="plan.slug === 'free'" class="mt-1 text-xs text-muted-foreground">
                                 30 Tage testen
