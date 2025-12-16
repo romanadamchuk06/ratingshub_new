@@ -15,12 +15,17 @@
 
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, usePage, router } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import EmptyState from '../components/EmptyState.vue';
 import LocationSelector from '../components/LocationSelector.vue';
 import ReviewCard from '../components/ReviewCard.vue';
+import ReviewCardSkeleton from '../components/ReviewCardSkeleton.vue';
+import SimpleTooltip from '@/components/ui/tooltip/SimpleTooltip.vue';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/composables/useToast';
 import { Star, Link2, RefreshCw } from 'lucide-vue-next';
+
+const { toast } = useToast();
 
 const page = usePage();
 const hasPlatformConnected = computed(() => page.props.auth.hasPlatformConnected);
@@ -52,8 +57,27 @@ const props = defineProps({
 // State für Sync-Button
 const syncing = ref(false);
 
+// State für Loading (wird true während Navigation/Filter-Änderungen)
+const loading = ref(true); // Startet als true für Initial-Loading
+
 // Location-Auswahl ist jetzt im LocationSelector integriert
 // Keine separate Warning-Box mehr nötig
+
+/**
+ * Initial Loading State
+ * Zeigt kurz Skeleton-Animation beim ersten Laden für bessere UX
+ */
+onMounted(() => {
+    if (hasPlatformConnected.value && props.reviews.data?.length > 0) {
+        // Kurzes Loading für Skeleton-Animation (nur wenn Reviews vorhanden)
+        setTimeout(() => {
+            loading.value = false;
+        }, 600);
+    } else {
+        // Kein Loading wenn keine Plattform verbunden oder keine Reviews
+        loading.value = false;
+    }
+});
 
 /**
  * Synchronisiert Reviews von der API
@@ -61,11 +85,18 @@ const syncing = ref(false);
  */
 const syncReviews = () => {
     if (props.connectedPlatforms.length === 0) {
-        alert('Keine Plattformen verbunden. Bitte verbinde zuerst eine Plattform unter Einstellungen → Plattformen.');
+        toast.warning(
+            'Keine Plattformen verbunden',
+            'Bitte verbinde zuerst eine Plattform unter Einstellungen → Plattformen.'
+        );
         return;
     }
 
     syncing.value = true;
+    loading.value = true; // Zeige Skeleton während Sync
+
+    // Info Toast dass Sync startet
+    toast.info('Synchronisierung gestartet', 'Bewertungen werden von Google abgerufen...', 3000);
 
     // Für jede verbundene Plattform einen Sync-Request senden
     router.post(
@@ -76,6 +107,19 @@ const syncReviews = () => {
         {
             preserveState: false, // Reload damit wir neue Reviews sehen
             preserveScroll: true,
+            onSuccess: (page) => {
+                // Success-Message vom Backend nutzen (falls vorhanden)
+                const newCount = page.props.flash?.success?.match(/\d+/)?.[0] || 0;
+                if (newCount > 0) {
+                    toast.success('Synchronisierung erfolgreich!', `${newCount} neue Bewertungen wurden importiert.`);
+                } else {
+                    toast.success('Synchronisierung erfolgreich!', 'Keine neuen Bewertungen gefunden.');
+                }
+            },
+            onError: (errors) => {
+                const errorMessage = errors.message || 'Die Synchronisierung ist fehlgeschlagen.';
+                toast.error('Synchronisierung fehlgeschlagen', errorMessage);
+            },
             onFinish: () => {
                 syncing.value = false;
             },
@@ -117,16 +161,20 @@ const currentFlashMessage = computed(() => {
                         :locations="connectedPlatforms"
                         :selected-ids="selectedLocationIds"
                     />
-                    <Button
+                    <SimpleTooltip
                         v-if="hasPlatformConnected && connectedPlatforms.length > 0"
-                        @click="syncReviews"
-                        :disabled="syncing"
-                        variant="outline"
-                        size="sm"
+                        text="Neue Bewertungen von Google My Business abrufen"
                     >
-                        <RefreshCw :class="['mr-2 h-4 w-4', syncing && 'animate-spin']" />
-                        {{ syncing ? 'Synchronisiere...' : 'Synchronisieren' }}
-                    </Button>
+                        <Button
+                            @click="syncReviews"
+                            :disabled="syncing"
+                            variant="outline"
+                            size="sm"
+                        >
+                            <RefreshCw :class="['mr-2 h-4 w-4', syncing && 'animate-spin']" />
+                            {{ syncing ? 'Synchronisiere...' : 'Synchronisieren' }}
+                        </Button>
+                    </SimpleTooltip>
                 </div>
             </div>
 
@@ -188,6 +236,11 @@ const currentFlashMessage = computed(() => {
                         title="Noch keine Bewertungen"
                         description="Sobald du Bewertungen erhältst, werden sie hier angezeigt und du kannst darauf antworten."
                     />
+
+                    <!-- Loading Skeletons -->
+                    <div v-else-if="loading" class="space-y-4">
+                        <ReviewCardSkeleton v-for="i in 3" :key="i" />
+                    </div>
 
                     <!-- Reviews Grid -->
                     <div v-else class="space-y-4">

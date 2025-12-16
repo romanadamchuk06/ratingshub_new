@@ -103,7 +103,15 @@ class GoogleMyBusinessService
     private function refreshAccessToken(ConnectedPlatform $platform): void
     {
         if (!$platform->refresh_token) {
-            throw new \Exception('Kein Refresh Token vorhanden. Bitte Platform neu verbinden.');
+            // Plattform als inaktiv markieren, damit User sieht dass Neuverbindung nötig ist
+            $platform->update(['is_active' => false]);
+
+            Log::warning('Kein Refresh Token vorhanden - Plattform deaktiviert', [
+                'platform_id' => $platform->id,
+                'user_id' => $platform->user_id,
+            ]);
+
+            throw new \Exception('Die Verbindung zu Google ist abgelaufen. Bitte verbinde dein Google-Konto unter Einstellungen → Plattformen neu.');
         }
 
         try {

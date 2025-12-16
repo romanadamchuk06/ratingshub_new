@@ -1,16 +1,15 @@
-<script setup lang="ts">
+<script setup>
 import AppContent from '@/components/AppContent.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
-import type { BreadcrumbItemType } from '@/types';
+import Toaster from '@/components/ui/toast/Toaster.vue';
 
-interface Props {
-    breadcrumbs?: BreadcrumbItemType[];
-}
-
-withDefaults(defineProps<Props>(), {
-    breadcrumbs: () => [],
+defineProps({
+    breadcrumbs: {
+        type: Array,
+        default: () => [],
+    },
 });
 </script>
 
@@ -21,5 +20,8 @@ withDefaults(defineProps<Props>(), {
             <AppSidebarHeader :breadcrumbs="breadcrumbs" />
             <slot />
         </AppContent>
+
+        <!-- Toast Container (Global) -->
+        <Toaster />
     </AppShell>
 </template>

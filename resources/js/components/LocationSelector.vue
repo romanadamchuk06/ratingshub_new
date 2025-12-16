@@ -99,7 +99,16 @@ const loadLocations = async () => {
         const response = await fetch(`/platforms/${googlePlatform.value.id}/locations`);
 
         if (!response.ok) {
-            throw new Error('Fehler beim Laden der Locations');
+            // Versuche detaillierten Fehler aus Response zu holen
+            let errorMessage = 'Fehler beim Laden der Locations';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorData.message || errorMessage;
+            } catch (jsonError) {
+                // Falls JSON-Parsing fehlschlägt, verwende Status-Text
+                errorMessage = `${errorMessage} (${response.status} ${response.statusText})`;
+            }
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();

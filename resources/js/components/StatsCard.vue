@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import SimpleTooltip from '@/components/ui/tooltip/SimpleTooltip.vue';
 
 const props = defineProps({
     title: String,
@@ -17,6 +18,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    tooltip: {
+        type: String,
+        default: null,
+    },
 });
 
 const trendColor = computed(() => {
@@ -31,9 +36,31 @@ const trendColor = computed(() => {
     <div class="rounded-xl border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
         <div class="flex items-center justify-between">
             <div class="flex-1">
-                <p class="text-sm font-medium text-muted-foreground">
+                <SimpleTooltip v-if="tooltip" :text="tooltip">
+                    <p class="text-sm font-medium text-muted-foreground cursor-help inline-flex items-center gap-1">
+                        {{ title }}
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            class="opacity-50"
+                        >
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                            <path d="M12 17h.01" />
+                        </svg>
+                    </p>
+                </SimpleTooltip>
+                <p v-else class="text-sm font-medium text-muted-foreground">
                     {{ title }}
                 </p>
+
                 <div class="mt-2 flex items-baseline gap-2">
                     <h3 v-if="!loading" class="text-2xl font-bold">
                         {{ value }}

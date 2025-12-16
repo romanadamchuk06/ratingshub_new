@@ -18,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/composables/useToast';
+import SimpleTooltip from '@/components/ui/tooltip/SimpleTooltip.vue';
 import {
     Star,
     MessageSquare,
@@ -28,6 +30,9 @@ import {
     MapPin,
     User as UserIcon,
 } from 'lucide-vue-next';
+
+// Toast für Feedback
+const { toast } = useToast();
 
 const props = defineProps({
     review: {
@@ -86,6 +91,18 @@ const statusText = computed(() => {
 });
 
 /**
+ * Tooltip-Text für Status-Badge (erklärt was der Status bedeutet)
+ */
+const statusTooltip = computed(() => {
+    const tooltips = {
+        pending: 'Diese Bewertung wartet auf eine Antwort von dir',
+        responded: 'Du hast bereits auf diese Bewertung geantwortet',
+        archived: 'Diese Bewertung wurde archiviert und ist nicht mehr aktiv',
+    };
+    return tooltips[props.review.status] || '';
+});
+
+/**
  * Formatiert Datum auf Deutsch
  * Beispiel: "vor 2 Tagen" oder "15. Jan 2024"
  */
@@ -111,6 +128,7 @@ const formattedDate = computed(() => {
  */
 const submitReply = () => {
     if (!replyText.value.trim()) {
+        toast.warning('Antwort ist leer', 'Bitte gib eine Antwort ein.');
         return;
     }
 
@@ -126,6 +144,14 @@ const submitReply = () => {
                 // Reset Form
                 replyText.value = '';
                 isReplying.value = false;
+
+                // Success Toast
+                toast.success('Antwort gesendet!', 'Deine Antwort wurde erfolgreich veröffentlicht.');
+            },
+            onError: (errors) => {
+                // Error Toast mit Details
+                const errorMessage = errors.response_text || 'Die Antwort konnte nicht gesendet werden.';
+                toast.error('Fehler beim Senden', errorMessage);
             },
             onFinish: () => {
                 submitting.value = false;
@@ -138,9 +164,25 @@ const submitReply = () => {
  * Ändert Review-Status
  */
 const updateStatus = (newStatus) => {
-    router.patch(`/reviews/${props.review.id}/status`, {
-        status: newStatus,
-    });
+    router.patch(
+        `/reviews/${props.review.id}/status`,
+        {
+            status: newStatus,
+        },
+        {
+            onSuccess: () => {
+                const statusLabels = {
+                    pending: 'ausstehend',
+                    responded: 'beantwortet',
+                    archived: 'archiviert',
+                };
+                toast.success('Status geändert', `Review wurde als ${statusLabels[newStatus]} markiert.`);
+            },
+            onError: () => {
+                toast.error('Fehler', 'Status konnte nicht geändert werden.');
+            },
+        }
+    );
 };
 
 /**
@@ -163,10 +205,12 @@ const toggleReply = () => {
                         {{ review.connected_platform?.provider || 'Plattform' }}
                     </Badge>
 
-                    <!-- Status Badge -->
-                    <Badge :variant="statusBadgeVariant">
-                        {{ statusText }}
-                    </Badge>
+                    <!-- Status Badge with Tooltip -->
+                    <SimpleTooltip :text="statusTooltip">
+                        <Badge :variant="statusBadgeVariant" class="cursor-help">
+                            {{ statusText }}
+                        </Badge>
+                    </SimpleTooltip>
                 </div>
 
                 <!-- Date -->
@@ -289,44 +333,56 @@ const toggleReply = () => {
             <!-- Left Actions -->
             <div class="flex items-center gap-2">
                 <!-- Reply Button (nur wenn noch nicht beantwortet) -->
-                <Button
+                <SimpleTooltip
                     v-if="
                         !isReplying &&
                         review.status === 'pending' &&
                         (!review.responses || review.responses.length === 0)
                     "
-                    @click="toggleReply"
-                    variant="default"
-                    size="sm"
+                    text="Verfasse eine öffentliche Antwort auf diese Bewertung"
                 >
-                    <MessageSquare class="mr-2 h-4 w-4" />
-                    Antworten
-                </Button>
+                    <Button
+                        @click="toggleReply"
+                        variant="default"
+                        size="sm"
+                    >
+                        <MessageSquare class="mr-2 h-4 w-4" />
+                        Antworten
+                    </Button>
+                </SimpleTooltip>
             </div>
 
             <!-- Right Actions -->
             <div class="flex items-center gap-2">
                 <!-- Archive Button -->
-                <Button
+                <SimpleTooltip
                     v-if="review.status !== 'archived'"
-                    @click="updateStatus('archived')"
-                    variant="outline"
-                    size="sm"
+                    text="Bewertung archivieren (aus der aktiven Liste entfernen)"
                 >
-                    <Archive class="mr-2 h-4 w-4" />
-                    Archivieren
-                </Button>
+                    <Button
+                        @click="updateStatus('archived')"
+                        variant="outline"
+                        size="sm"
+                    >
+                        <Archive class="mr-2 h-4 w-4" />
+                        Archivieren
+                    </Button>
+                </SimpleTooltip>
 
                 <!-- Unarchive Button -->
-                <Button
+                <SimpleTooltip
                     v-if="review.status === 'archived'"
-                    @click="updateStatus('pending')"
-                    variant="outline"
-                    size="sm"
+                    text="Bewertung wiederherstellen (zurück zur aktiven Liste)"
                 >
-                    <RotateCcw class="mr-2 h-4 w-4" />
-                    Wiederherstellen
-                </Button>
+                    <Button
+                        @click="updateStatus('pending')"
+                        variant="outline"
+                        size="sm"
+                    >
+                        <RotateCcw class="mr-2 h-4 w-4" />
+                        Wiederherstellen
+                    </Button>
+                </SimpleTooltip>
             </div>
         </CardFooter>
     </Card>

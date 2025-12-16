@@ -38,12 +38,24 @@ const page = usePage();
 const hasPlatformConnected = computed(() => page.props.auth.hasPlatformConnected);
 
 const showModal = ref(false);
+const loadingStats = ref(true);
 
 // Show modal on mount if no platforms connected and not dismissed
 onMounted(() => {
     const dismissed = sessionStorage.getItem('platformModalDismissed');
     if (!hasPlatformConnected.value && !dismissed) {
         showModal.value = true;
+    }
+
+    // Simulate loading for better UX (zeigt Skeleton-Animation kurz an)
+    // Nur beim ersten Laden, nicht bei jedem Navigation
+    if (hasPlatformConnected.value) {
+        setTimeout(() => {
+            loadingStats.value = false;
+        }, 400);
+    } else {
+        // Wenn keine Plattform verbunden, kein Loading nötig
+        loadingStats.value = false;
     }
 });
 
@@ -84,25 +96,29 @@ const closeModal = () => {
                     title="Gesamtbewertungen"
                     :value="hasPlatformConnected ? stats.totalReviews.toString() : '-'"
                     :icon="Star"
-                    :loading="false"
+                    :loading="loadingStats"
+                    tooltip="Anzahl aller Bewertungen von verbundenen Plattformen"
                 />
                 <StatsCard
                     title="Durchschnitt"
                     :value="hasPlatformConnected && stats.averageRating ? `${stats.averageRating} ⭐` : '-'"
                     :icon="Award"
-                    :loading="false"
+                    :loading="loadingStats"
+                    tooltip="Durchschnittliche Bewertung (1-5 Sterne) aller Reviews"
                 />
                 <StatsCard
                     title="Neue diese Woche"
                     :value="hasPlatformConnected ? stats.newThisWeek.toString() : '-'"
                     :icon="TrendingUp"
-                    :loading="false"
+                    :loading="loadingStats"
+                    tooltip="Bewertungen, die in den letzten 7 Tagen abgegeben wurden"
                 />
                 <StatsCard
                     title="Zu beantworten"
                     :value="hasPlatformConnected ? stats.pendingReviews.toString() : '-'"
                     :icon="MessageSquare"
-                    :loading="false"
+                    :loading="loadingStats"
+                    tooltip="Anzahl unbeantworteter Bewertungen (Status: Ausstehend)"
                 />
             </div>
 

@@ -24,6 +24,12 @@ class PlatformController extends Controller
             ->scopes([
                 'https://www.googleapis.com/auth/business.manage',
             ])
+            // WICHTIG: access_type=offline und prompt=consent erzwingen Refresh Token
+            // Ohne diese Parameter gibt Google nur beim ersten Mal einen Refresh Token
+            ->with([
+                'access_type' => 'offline',  // Ermöglicht Offline-Zugriff (Refresh Token)
+                'prompt' => 'consent',       // Zwingt User zur erneuten Zustimmung (gibt immer Refresh Token)
+            ])
             ->redirect();
     }
 
