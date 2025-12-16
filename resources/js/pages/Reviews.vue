@@ -19,8 +19,9 @@ import { computed, ref } from 'vue';
 import EmptyState from '../components/EmptyState.vue';
 import LocationSelector from '../components/LocationSelector.vue';
 import ReviewCard from '../components/ReviewCard.vue';
+import GoogleLocationSelector from '../components/GoogleLocationSelector.vue';
 import { Button } from '@/components/ui/button';
-import { Star, Link2, RefreshCw } from 'lucide-vue-next';
+import { Star, Link2, RefreshCw, AlertCircle } from 'lucide-vue-next';
 
 const page = usePage();
 const hasPlatformConnected = computed(() => page.props.auth.hasPlatformConnected);
@@ -51,6 +52,17 @@ const props = defineProps({
 
 // State für Sync-Button
 const syncing = ref(false);
+
+/**
+ * Prüft ob alle verbundenen Google Plattformen eine Location haben
+ */
+const platformsNeedingLocation = computed(() => {
+    return props.connectedPlatforms.filter(
+        (platform) => platform.provider === 'google' && !platform.metadata?.location_name
+    );
+});
+
+const hasLocationIssue = computed(() => platformsNeedingLocation.value.length > 0);
 
 /**
  * Synchronisiert Reviews von der API
@@ -141,6 +153,35 @@ const currentFlashMessage = computed(() => {
             >
                 <div class="flex items-center justify-between gap-3">
                     <span class="text-sm font-medium">{{ currentFlashMessage.text }}</span>
+                </div>
+            </div>
+
+            <!-- Google Location Auswahl (wenn noch nicht gesetzt) -->
+            <div
+                v-if="hasLocationIssue"
+                class="rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950 p-6"
+            >
+                <div class="flex items-start gap-3 mb-4">
+                    <div class="h-10 w-10 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
+                        <AlertCircle class="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-orange-900 dark:text-orange-100">
+                            Standort auswählen erforderlich
+                        </h3>
+                        <p class="text-sm text-orange-800 dark:text-orange-200 mt-1">
+                            Bevor du Bewertungen synchronisieren kannst, musst du deinen Google My Business Standort auswählen.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Location Selector für jede Plattform ohne Location -->
+                <div
+                    v-for="platform in platformsNeedingLocation"
+                    :key="platform.id"
+                    class="bg-white dark:bg-gray-900 rounded-lg p-4 border"
+                >
+                    <GoogleLocationSelector :platform="platform" />
                 </div>
             </div>
 
