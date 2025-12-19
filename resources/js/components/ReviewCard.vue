@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/composables/useToast';
 import SimpleTooltip from '@/components/ui/tooltip/SimpleTooltip.vue';
 import {
@@ -29,6 +30,8 @@ import {
     Calendar,
     MapPin,
     User as UserIcon,
+    Sparkles,
+    Loader2,
 } from 'lucide-vue-next';
 
 // Toast für Feedback
@@ -45,6 +48,20 @@ const props = defineProps({
 const isReplying = ref(false);
 const replyText = ref('');
 const submitting = ref(false);
+
+// State für AI-Generierung
+const aiGenerating = ref(false);
+const selectedStyle = ref('friendly');
+const showStyleSelector = ref(false);
+
+// Verfügbare AI-Stile
+const aiStyles = {
+    professional: { name: 'Professionell', description: 'Formell und geschäftsmäßig' },
+    friendly: { name: 'Freundlich', description: 'Warm und persönlich' },
+    concise: { name: 'Kurz & Knapp', description: 'Prägnant und auf den Punkt' },
+    enthusiastic: { name: 'Enthusiastisch', description: 'Energiegeladen und positiv' },
+    empathetic: { name: 'Empathisch', description: 'Verständnisvoll und mitfühlend' },
+};
 
 /**
  * Rating als Array von Sternen (für visuelle Darstellung)
@@ -191,6 +208,47 @@ const updateStatus = (newStatus) => {
 const toggleReply = () => {
     isReplying.value = !isReplying.value;
 };
+
+/**
+ * Generiert AI-Antwort mit ausgewähltem Stil
+ */
+const generateAIResponse = async () => {
+    aiGenerating.value = true;
+
+    try {
+        const response = await fetch(`/reviews/${props.review.id}/ai-response`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            },
+            body: JSON.stringify({
+                style: selectedStyle.value,
+                context: {
+                    location_name: props.review.metadata?.location_name || '',
+                },
+            }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Setze generierte Antwort in Textarea
+            replyText.value = data.response;
+            toast.success('AI-Antwort generiert!', 'Du kannst die Antwort jetzt bearbeiten oder direkt senden.');
+        } else {
+            toast.error('Fehler bei AI-Generierung', data.error || 'Unbekannter Fehler');
+        }
+    } catch (error) {
+        console.error('AI Generation Error:', error);
+        toast.error(
+            'Fehler bei AI-Generierung',
+            'Stelle sicher, dass OPENAI_API_KEY in .env konfiguriert ist.'
+        );
+    } finally {
+        aiGenerating.value = false;
+    }
+};
 </script>
 
 <template>
@@ -301,17 +359,75 @@ const toggleReply = () => {
 
             <!-- Reply Form -->
             <div v-if="isReplying && review.status !== 'archived'" class="space-y-3 pt-4">
+                <!-- AI-Generierung Bereich -->
+                <div class="rounded-lg border bg-muted/30 p-3 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <Sparkles class="h-4 w-4 text-primary" />
+                            <span class="text-sm font-medium">AI-Assistent</span>
+                        </div>
+                        <Button
+                            @click="showStyleSelector = !showStyleSelector"
+                            variant="ghost"
+                            size="sm"
+                            class="h-7 text-xs"
+                        >
+                            {{ showStyleSelector ? 'Verbergen' : 'Stil wählen' }}
+                        </Button>
+                    </div>
+
+                    <!-- Stil-Auswahl -->
+                    <div v-if="showStyleSelector" class="space-y-2">
+                        <label class="text-xs text-muted-foreground">Antwort-Stil:</label>
+                        <Select v-model="selectedStyle">
+                            <SelectTrigger class="h-9">
+                                <SelectValue :placeholder="aiStyles[selectedStyle].name" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    <SelectItem
+                                        v-for="(style, key) in aiStyles"
+                                        :key="key"
+                                        :value="key"
+                                    >
+                                        <div class="flex flex-col">
+                                            <span class="font-medium">{{ style.name }}</span>
+                                            <span class="text-xs text-muted-foreground">{{ style.description }}</span>
+                                        </div>
+                                    </SelectItem>
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <!-- AI Generieren Button -->
+                    <Button
+                        @click="generateAIResponse"
+                        :disabled="aiGenerating || submitting"
+                        variant="secondary"
+                        size="sm"
+                        class="w-full"
+                    >
+                        <Loader2 v-if="aiGenerating" class="mr-2 h-4 w-4 animate-spin" />
+                        <Sparkles v-else class="mr-2 h-4 w-4" />
+                        {{ aiGenerating ? 'Generiere Antwort...' : 'Antwort mit AI generieren' }}
+                    </Button>
+                </div>
+
+                <!-- Textarea für Antwort (editierbar) -->
                 <Textarea
                     v-model="replyText"
-                    placeholder="Schreibe eine Antwort..."
+                    placeholder="Schreibe eine Antwort oder generiere eine mit AI..."
                     rows="4"
-                    :disabled="submitting"
+                    :disabled="submitting || aiGenerating"
                     class="resize-none"
                 />
+
+                <!-- Aktions-Buttons -->
                 <div class="flex items-center gap-2">
                     <Button
                         @click="submitReply"
-                        :disabled="!replyText.trim() || submitting"
+                        :disabled="!replyText.trim() || submitting || aiGenerating"
                         size="sm"
                     >
                         <Send class="mr-2 h-4 w-4" />
@@ -321,7 +437,7 @@ const toggleReply = () => {
                         @click="toggleReply"
                         variant="outline"
                         size="sm"
-                        :disabled="submitting"
+                        :disabled="submitting || aiGenerating"
                     >
                         Abbrechen
                     </Button>

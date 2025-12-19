@@ -153,7 +153,13 @@ Route::middleware(['auth', 'verified', 'subscribed'])->prefix('reviews')->name('
 
     // Review-Statistiken (für Dashboard)
     Route::get('/stats', [\App\Http\Controllers\ReviewController::class, 'stats'])->name('stats');
+
+    // AI-generierte Antworten
+    Route::post('/{review}/ai-response', [\App\Http\Controllers\AIResponseController::class, 'generate'])->name('ai-response');
 });
+
+// AI Styles Route (außerhalb reviews, da global)
+Route::middleware(['auth', 'verified'])->get('/ai/styles', [\App\Http\Controllers\AIResponseController::class, 'styles'])->name('ai.styles');
 
 // Platform OAuth Routes
 Route::middleware(['auth', 'verified'])->prefix('platforms')->name('platforms.')->group(function () {

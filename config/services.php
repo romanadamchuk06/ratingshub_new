@@ -42,4 +42,9 @@ return [
         'redirect' => env('APP_URL') . '/platforms/callback/google',
     ],
 
+    // OpenAI API für AI-generierte Review-Antworten
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+    ],
+
 ];
