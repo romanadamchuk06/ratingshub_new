@@ -42,9 +42,20 @@ return [
         'redirect' => env('APP_URL') . '/platforms/callback/google',
     ],
 
+    // AI Configuration
+    'ai' => [
+        'provider' => env('AI_PROVIDER', 'ollama'), // 'openai' oder 'ollama'
+    ],
+
     // OpenAI API für AI-generierte Review-Antworten
     'openai' => [
         'api_key' => env('OPENAI_API_KEY'),
+    ],
+
+    // Ollama (Local AI)
+    'ollama' => [
+        'host' => env('OLLAMA_HOST', 'http://ollama:11434'),
+        'model' => env('OLLAMA_MODEL', 'llama3.2'),
     ],
 
 ];

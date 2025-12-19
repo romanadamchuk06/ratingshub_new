@@ -55,6 +55,19 @@ services:
     networks:
       - app-network
 
+  #Ollama Service (Local AI)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    networks:
+      - app-network
+
 #Docker Networks
 networks:
   app-network:
@@ -62,4 +75,6 @@ networks:
 #Volumes
 volumes:
   dbdata:
+    driver: local
+  ollama:
     driver: local
