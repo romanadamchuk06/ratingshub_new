@@ -107,6 +107,30 @@ Route::middleware(['auth', 'verified', 'subscribed'])->group(function () {
             ->limit(5)
             ->get();
 
+        // Reviews mit Problemen (negative Sentiments) - für Problembereich
+        // Zeigt die neuesten Reviews mit negativen Sentiments, damit User sofort Handlungsbedarf sieht
+        // Nur unbeantwortete/nicht archivierte Reviews
+        $problemReviews = (clone $reviewsQuery)
+            ->whereHas('sentiments', function ($query) {
+                $query->where('sentiment', 'negative');
+            })
+            ->whereNotIn('status', ['answered', 'archived']) // Nur offene Reviews mit Problemen
+            ->with(['connectedPlatform', 'sentiments' => function ($query) {
+                // Nur negative Sentiments laden
+                $query->where('sentiment', 'negative');
+            }])
+            ->orderBy('review_date', 'desc')
+            ->limit(3) // Nur 3 Reviews anzeigen
+            ->get();
+
+        // Zähle Reviews mit Problemen (für Stats) - auch nur unbeantwortete/nicht archivierte
+        $reviewsWithProblems = (clone $reviewsQuery)
+            ->whereHas('sentiments', function ($query) {
+                $query->where('sentiment', 'negative');
+            })
+            ->whereNotIn('status', ['answered', 'archived'])
+            ->count();
+
         return Inertia::render('Dashboard', [
             'connectedPlatforms' => $connectedPlatforms,
             'selectedLocationIds' => $selectedLocationIds,
@@ -115,8 +139,10 @@ Route::middleware(['auth', 'verified', 'subscribed'])->group(function () {
                 'averageRating' => $averageRating,
                 'newThisWeek' => $newThisWeek,
                 'pendingReviews' => $pendingReviews,
+                'reviewsWithProblems' => $reviewsWithProblems, // Neue Statistik
             ],
             'recentReviews' => $recentReviews,
+            'problemReviews' => $problemReviews, // Reviews mit negativen Sentiments
         ]);
     })->name('dashboard');
 

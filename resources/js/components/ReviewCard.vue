@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/composables/useToast';
 import SimpleTooltip from '@/components/ui/tooltip/SimpleTooltip.vue';
+import SentimentTag from '@/components/SentimentTag.vue';
 import {
     Star,
     MessageSquare,
@@ -41,6 +42,10 @@ const props = defineProps({
     review: {
         type: Object,
         required: true,
+    },
+    highlighted: {
+        type: Boolean,
+        default: false,
     },
 });
 
@@ -252,7 +257,12 @@ const generateAIResponse = async () => {
 </script>
 
 <template>
-    <Card class="hover:shadow-lg transition-shadow">
+    <Card
+        :class="[
+            'hover:shadow-lg transition-all duration-300',
+            highlighted && 'ring-4 ring-blue-500 dark:ring-blue-400 shadow-2xl animate-pulse',
+        ]"
+    >
         <CardHeader class="space-y-4">
             <!-- Top Row: Platform Badge + Status Badge + Date -->
             <div class="flex items-center justify-between flex-wrap gap-2">
@@ -330,6 +340,16 @@ const generateAIResponse = async () => {
             </div>
             <div v-else class="text-sm text-muted-foreground italic">
                 Keine Bewertungstext vorhanden
+            </div>
+
+            <!-- Sentiment-Tags (Kategorien) -->
+            <div v-if="review.sentiments && review.sentiments.length > 0" class="flex flex-wrap gap-2 pt-3">
+                <SentimentTag
+                    v-for="sentiment in review.sentiments"
+                    :key="sentiment.id"
+                    :sentiment="sentiment"
+                    size="sm"
+                />
             </div>
 
             <!-- Existing Responses -->

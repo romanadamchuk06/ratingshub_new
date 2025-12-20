@@ -58,4 +58,44 @@ class Review extends Model
     {
         return $this->hasMany(ReviewResponse::class);
     }
+
+    /**
+     * Beziehung: Review hat Sentiment-Analysen für verschiedene Kategorien
+     */
+    public function sentiments(): HasMany
+    {
+        return $this->hasMany(ReviewSentiment::class);
+    }
+
+    /**
+     * Hole alle negativen Sentiments (Probleme/Kritik)
+     */
+    public function negativesentiments(): HasMany
+    {
+        return $this->hasMany(ReviewSentiment::class)->where('sentiment', 'negative');
+    }
+
+    /**
+     * Hole alle positiven Sentiments
+     */
+    public function positiveSentiments(): HasMany
+    {
+        return $this->hasMany(ReviewSentiment::class)->where('sentiment', 'positive');
+    }
+
+    /**
+     * Hat dieses Review Probleme/Kritik in irgendeiner Kategorie?
+     */
+    public function hasProblems(): bool
+    {
+        return $this->sentiments()->where('sentiment', 'negative')->exists();
+    }
+
+    /**
+     * Hole Sentiment für eine bestimmte Kategorie
+     */
+    public function getSentimentForCategory(string $category): ?ReviewSentiment
+    {
+        return $this->sentiments()->where('category', $category)->first();
+    }
 }

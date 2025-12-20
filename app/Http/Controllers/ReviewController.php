@@ -52,7 +52,8 @@ class ReviewController extends Controller
             // Eager Loading: Lade Beziehungen mit, um N+1 Queries zu vermeiden
             // - connectedPlatform: Plattform-Info (Google, Trustpilot, etc.)
             // - responses: Alle Antworten auf diesen Review
-            ->with(['connectedPlatform', 'responses'])
+            // - sentiments: Sentiment-Analyse Kategorien für erste 10 Reviews
+            ->with(['connectedPlatform', 'responses', 'sentiments'])
             // Neueste zuerst (nach Review-Datum auf der Plattform)
             ->orderBy('review_date', 'desc');
 

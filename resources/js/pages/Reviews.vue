@@ -15,7 +15,7 @@
 
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, usePage, router } from '@inertiajs/vue3';
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, nextTick } from 'vue';
 import EmptyState from '../components/EmptyState.vue';
 import LocationSelector from '../components/LocationSelector.vue';
 import ReviewCard from '../components/ReviewCard.vue';
@@ -29,6 +29,9 @@ const { toast } = useToast();
 
 const page = usePage();
 const hasPlatformConnected = computed(() => page.props.auth.hasPlatformConnected);
+
+// Highlight-Funktion: Zeigt einen bestimmten Review hervorgehoben an
+const highlightedReviewId = ref(null);
 
 // Flash Messages vom Backend lesen
 const flashSuccess = computed(() => page.props.flash?.success);
@@ -64,14 +67,54 @@ const loading = ref(true); // Startet als true für Initial-Loading
 // Keine separate Warning-Box mehr nötig
 
 /**
+ * Scrollt zu einem bestimmten Review und hebt ihn hervor
+ * Wird verwendet wenn User von Dashboard auf einen Problem-Review klickt
+ */
+const scrollToReview = (reviewId) => {
+    nextTick(() => {
+        const element = document.getElementById(`review-${reviewId}`);
+        if (element) {
+            // Scroll mit etwas Offset für bessere Sichtbarkeit
+            const yOffset = -100;
+            const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+
+            // Highlight-Effekt anzeigen
+            highlightedReviewId.value = reviewId;
+
+            // Info-Toast dass wir zum Review gescrollt haben
+            toast.info('Review gefunden', 'Wir haben dich zum gewünschten Review gebracht.', 3000);
+
+            // Highlight nach 5 Sekunden entfernen
+            setTimeout(() => {
+                highlightedReviewId.value = null;
+            }, 5000);
+        }
+    });
+};
+
+/**
  * Initial Loading State
  * Zeigt kurz Skeleton-Animation beim ersten Laden für bessere UX
+ * Prüft auch ob ein Review hervorgehoben werden soll (via Hash-Anker)
  */
 onMounted(() => {
+    // Prüfe ob ein Review hervorgehoben werden soll (z.B. #review-457)
+    const hash = window.location.hash; // z.B. "#review-457"
+    const reviewIdMatch = hash.match(/#review-(\d+)/);
+    const highlightId = reviewIdMatch ? reviewIdMatch[1] : null;
+
     if (hasPlatformConnected.value && props.reviews.data?.length > 0) {
         // Kurzes Loading für Skeleton-Animation (nur wenn Reviews vorhanden)
         setTimeout(() => {
             loading.value = false;
+
+            // Nach dem Laden zum Review scrollen (falls Hash-Anker vorhanden)
+            if (highlightId) {
+                setTimeout(() => {
+                    scrollToReview(parseInt(highlightId));
+                }, 300); // Kurze Verzögerung damit Skeleton-Animation fertig ist
+            }
         }, 600);
     } else {
         // Kein Loading wenn keine Plattform verbunden oder keine Reviews
@@ -244,11 +287,16 @@ const currentFlashMessage = computed(() => {
 
                     <!-- Reviews Grid -->
                     <div v-else class="space-y-4">
-                        <ReviewCard
+                        <div
                             v-for="review in reviews.data"
                             :key="review.id"
-                            :review="review"
-                        />
+                            :id="`review-${review.id}`"
+                        >
+                            <ReviewCard
+                                :review="review"
+                                :highlighted="highlightedReviewId === review.id"
+                            />
+                        </div>
                     </div>
 
                     <!-- Pagination -->

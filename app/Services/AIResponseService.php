@@ -145,7 +145,8 @@ class AIResponseService
         $fullPrompt = $this->getSystemPrompt($styleConfig['tone']) . "\n\n" . $prompt;
 
         // Ollama API Call
-        $response = Http::timeout(60)->post("{$ollamaHost}/api/generate", [
+        // Timeout erhöht auf 180 Sekunden, da lokale AI-Modelle länger brauchen
+        $response = Http::timeout(180)->post("{$ollamaHost}/api/generate", [
             'model' => $ollamaModel,
             'prompt' => $fullPrompt,
             'stream' => false,
