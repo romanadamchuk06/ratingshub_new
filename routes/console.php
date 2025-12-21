@@ -20,18 +20,17 @@ Schedule::command('subscription:cleanup-grace-periods')
 
 /**
  * Review Sentiment-Analyse:
- * - DEAKTIVIERT: Wird manuell ausgeführt oder via Custom Command in Laravel Cloud
- * - Analysiert neue Reviews (die noch keine Sentiments haben)
+ * - Läuft alle 6 Stunden
+ * - Analysiert nur neue Reviews (die noch keine Sentiments haben)
  * - Verwendet AI (OpenAI/Ollama) um Kategorien und Sentiments zu extrahieren
- *
- * WICHTIG: Nicht als Scheduled Task nutzen! Führe es manuell aus:
- * php artisan reviews:analyze-sentiments --all
+ * - withoutOverlapping verhindert dass es parallel läuft
+ * - Bei 500 Reviews werden sie nach und nach alle 6h analysiert
  */
-// Schedule::command('reviews:analyze-sentiments --all')
-//     ->everySixHours()
-//     ->timezone('Europe/Berlin')
-//     ->withoutOverlapping()
-//     ->runInBackground();
+Schedule::command('reviews:analyze-sentiments --all')
+    ->everySixHours()
+    ->timezone('Europe/Berlin')
+    ->withoutOverlapping() // Verhindert parallele Ausführungen
+    ->runInBackground(); // Läuft im Hintergrund
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
