@@ -13,7 +13,7 @@ import {
 import { dashboard } from '@/routes';
 import { Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
-import { LayoutGrid, Star, Shield, Building2 } from 'lucide-vue-next';
+import { LayoutGrid, Star, Shield } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 
 const page = usePage();
@@ -33,12 +33,6 @@ const mainNavItems = computed(() => {
             href: '/reviews',
             icon: Star,
             disabled: !hasPlatformConnected.value,
-        },
-        {
-            title: 'Unternehmen',
-            href: '/settings/business',
-            icon: Building2,
-            disabled: false,
         },
     ];
 
