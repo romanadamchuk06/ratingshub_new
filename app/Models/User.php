@@ -87,6 +87,14 @@ class User extends Authenticatable
     }
 
     /**
+     * User hat ein Business Profile (1:1 Beziehung)
+     */
+    public function businessProfile()
+    {
+        return $this->hasOne(BusinessProfile::class);
+    }
+
+    /**
      * Check if user is on trial period
      */
     public function onTrial(): bool

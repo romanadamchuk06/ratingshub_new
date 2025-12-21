@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BusinessProfileController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
@@ -29,4 +30,8 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/platforms', function () {
         return Inertia::render('settings/Platforms');
     })->name('settings.platforms');
+
+    // Business Profile (Unternehmensverwaltung)
+    Route::get('settings/business', [BusinessProfileController::class, 'edit'])->name('business.edit');
+    Route::put('settings/business', [BusinessProfileController::class, 'update'])->name('business.update');
 });
