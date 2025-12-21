@@ -131,6 +131,28 @@ Route::middleware(['auth', 'verified', 'subscribed'])->group(function () {
             ->whereNotIn('status', ['answered', 'archived'])
             ->count();
 
+        // Chart-Daten: Bewertungsverlauf über die letzten 30 Tage
+        $ratingTrend = [];
+        $trendLabels = [];
+        for ($i = 29; $i >= 0; $i--) {
+            $date = now()->subDays($i);
+            $trendLabels[] = $date->format('d.m');
+
+            $avg = (clone $reviewsQuery)
+                ->whereDate('review_date', $date->format('Y-m-d'))
+                ->avg('rating');
+
+            $ratingTrend[] = $avg ? round($avg, 1) : null;
+        }
+
+        // Chart-Daten: Verteilung der Sterne (1-5)
+        $ratingDistribution = [];
+        for ($star = 1; $star <= 5; $star++) {
+            $ratingDistribution[$star] = (clone $reviewsQuery)
+                ->where('rating', $star)
+                ->count();
+        }
+
         return Inertia::render('Dashboard', [
             'connectedPlatforms' => $connectedPlatforms,
             'selectedLocationIds' => $selectedLocationIds,
@@ -143,6 +165,13 @@ Route::middleware(['auth', 'verified', 'subscribed'])->group(function () {
             ],
             'recentReviews' => $recentReviews,
             'problemReviews' => $problemReviews, // Reviews mit negativen Sentiments
+            'chartData' => [
+                'ratingTrend' => [
+                    'labels' => $trendLabels,
+                    'values' => $ratingTrend,
+                ],
+                'ratingDistribution' => $ratingDistribution,
+            ],
         ]);
     })->name('dashboard');
 
