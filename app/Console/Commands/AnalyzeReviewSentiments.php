@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\AnalyzeReviewSentimentJob;
 use App\Models\Review;
 use App\Services\ReviewSentimentAnalyzer;
 use Illuminate\Console\Command;
@@ -9,24 +10,33 @@ use Illuminate\Console\Command;
 /**
  * Analysiert Reviews und extrahiert Sentiments für verschiedene Kategorien
  *
+ * WICHTIG: Dieses Command dispatcht Queue Jobs!
+ * - Jeder Review wird als separater Job in die Queue gestellt
+ * - Der Queue Worker verarbeitet sie dann nacheinander
+ * - Nicht blockierend, automatische Retries, parallele Verarbeitung
+ *
  * Usage:
  * - php artisan reviews:analyze-sentiments --all      # Alle Reviews ohne Sentiments analysieren
  * - php artisan reviews:analyze-sentiments --review=1 # Spezifisches Review analysieren
  * - php artisan reviews:analyze-sentiments --force    # Alle Reviews neu analysieren
+ * - php artisan reviews:analyze-sentiments --sync     # Synchron ausführen (ohne Queue)
  */
 class AnalyzeReviewSentiments extends Command
 {
     protected $signature = 'reviews:analyze-sentiments
                             {--all : Analysiere alle Reviews ohne Sentiments}
                             {--review= : ID eines spezifischen Reviews}
-                            {--force : Re-analysiere auch Reviews mit bestehenden Sentiments}';
+                            {--force : Re-analysiere auch Reviews mit bestehenden Sentiments}
+                            {--sync : Synchron ausführen (ohne Queue, direkt analysieren)}';
 
-    protected $description = 'Analysiert Reviews mit AI und extrahiert Sentiments für verschiedene Kategorien';
+    protected $description = 'Analysiert Reviews mit AI und extrahiert Sentiments (via Queue Jobs)';
 
     public function handle(ReviewSentimentAnalyzer $analyzer)
     {
         $this->info('🔍 Review Sentiment-Analyse gestartet...');
         $this->newLine();
+
+        $useQueue = !$this->option('sync'); // Default: Queue nutzen, außer --sync ist gesetzt
 
         // Spezifisches Review analysieren
         if ($reviewId = $this->option('review')) {
@@ -37,12 +47,17 @@ class AnalyzeReviewSentiments extends Command
                 return 1;
             }
 
-            $this->info("Analysiere Review #{$review->id}...");
-            $sentiments = $analyzer->analyze($review);
-
-            $count = count($sentiments);
-            $this->info("✅ {$count} Sentiments gefunden!");
-            $this->displaySentiments($sentiments);
+            if ($useQueue) {
+                $this->info("Stelle Review #{$review->id} in die Queue...");
+                AnalyzeReviewSentimentJob::dispatch($review);
+                $this->info("✅ Job wurde in die Queue gestellt!");
+            } else {
+                $this->info("Analysiere Review #{$review->id} (synchron)...");
+                $sentiments = $analyzer->analyze($review);
+                $count = count($sentiments);
+                $this->info("✅ {$count} Sentiments gefunden!");
+                $this->displaySentiments($sentiments);
+            }
 
             return 0;
         }
@@ -66,32 +81,53 @@ class AnalyzeReviewSentiments extends Command
             $this->info("📊 {$reviews->count()} Reviews gefunden.");
             $this->newLine();
 
-            $progressBar = $this->output->createProgressBar($reviews->count());
-            $progressBar->start();
+            if ($useQueue) {
+                // Queue-Modus: Dispatch Jobs
+                $this->info('🚀 Stelle Jobs in die Queue...');
+                $progressBar = $this->output->createProgressBar($reviews->count());
+                $progressBar->start();
 
-            $analyzed = 0;
-            $failed = 0;
-
-            foreach ($reviews as $review) {
-                try {
-                    $analyzer->analyze($review);
-                    $analyzed++;
-                } catch (\Exception $e) {
-                    $failed++;
-                    $this->newLine();
-                    $this->error("Fehler bei Review #{$review->id}: {$e->getMessage()}");
+                foreach ($reviews as $review) {
+                    AnalyzeReviewSentimentJob::dispatch($review);
+                    $progressBar->advance();
                 }
 
-                $progressBar->advance();
-            }
+                $progressBar->finish();
+                $this->newLine(2);
+                $this->info("✅ {$reviews->count()} Jobs wurden in die Queue gestellt!");
+                $this->info("   Der Queue Worker wird sie jetzt verarbeiten.");
+                $this->newLine();
+                $this->comment("💡 Tipp: Überwache den Fortschritt mit: php artisan queue:work");
+            } else {
+                // Sync-Modus: Direkt analysieren (alte Methode)
+                $this->warn('⚠️  Sync-Modus: Analysiere direkt (blockierend!)');
+                $progressBar = $this->output->createProgressBar($reviews->count());
+                $progressBar->start();
 
-            $progressBar->finish();
-            $this->newLine(2);
+                $analyzed = 0;
+                $failed = 0;
 
-            $this->info("✅ Analyse abgeschlossen!");
-            $this->info("   Erfolgreich: {$analyzed}");
-            if ($failed > 0) {
-                $this->warn("   Fehler: {$failed}");
+                foreach ($reviews as $review) {
+                    try {
+                        $analyzer->analyze($review);
+                        $analyzed++;
+                    } catch (\Exception $e) {
+                        $failed++;
+                        $this->newLine();
+                        $this->error("Fehler bei Review #{$review->id}: {$e->getMessage()}");
+                    }
+
+                    $progressBar->advance();
+                }
+
+                $progressBar->finish();
+                $this->newLine(2);
+
+                $this->info("✅ Analyse abgeschlossen!");
+                $this->info("   Erfolgreich: {$analyzed}");
+                if ($failed > 0) {
+                    $this->warn("   Fehler: {$failed}");
+                }
             }
 
             return 0;
@@ -99,9 +135,10 @@ class AnalyzeReviewSentiments extends Command
 
         // Keine Option angegeben
         $this->warn('⚠️  Bitte wähle eine Option:');
-        $this->line('   --all           Analysiere alle Reviews ohne Sentiments');
-        $this->line('   --review=ID     Analysiere spezifisches Review');
-        $this->line('   --force         Re-analysiere alle Reviews');
+        $this->line('   --all           Analysiere alle Reviews ohne Sentiments (via Queue)');
+        $this->line('   --review=ID     Analysiere spezifisches Review (via Queue)');
+        $this->line('   --force         Re-analysiere alle Reviews (via Queue)');
+        $this->line('   --sync          Synchron ausführen (ohne Queue, blockierend)');
 
         return 1;
     }

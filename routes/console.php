@@ -18,6 +18,18 @@ Schedule::command('subscription:cleanup-grace-periods')
     ->timezone('Europe/Berlin')
     ->emailOutputOnFailure(env('ADMIN_EMAIL', 'admin@example.com'));
 
+/**
+ * Review Sentiment-Analyse:
+ * - Läuft alle 6 Stunden
+ * - Analysiert neue Reviews (die noch keine Sentiments haben)
+ * - Verwendet AI (OpenAI/Ollama) um Kategorien und Sentiments zu extrahieren
+ */
+Schedule::command('reviews:analyze-sentiments --all')
+    ->everySixHours()
+    ->timezone('Europe/Berlin')
+    ->withoutOverlapping() // Verhindert parallele Ausführungen
+    ->runInBackground(); // Läuft im Hintergrund, blockiert nicht den Scheduler
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

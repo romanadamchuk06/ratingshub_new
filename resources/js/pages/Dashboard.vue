@@ -228,7 +228,7 @@ const closeModal = () => {
 
                             <!-- Action Button -->
                             <div class="mt-4 pt-4 border-t border-red-100 dark:border-red-900/30">
-                                <Link :href="`/reviews#review-${review.id}`">
+                                <Link :href="`/reviews?problems=true&highlight=${review.id}#review-${review.id}`">
                                     <Button variant="outline" size="sm" class="w-full sm:w-auto">
                                         Review ansehen & reagieren
                                         <ArrowRight class="ml-2 h-4 w-4" />
@@ -239,7 +239,7 @@ const closeModal = () => {
 
                         <!-- Alle Problem-Reviews anzeigen -->
                         <div v-if="stats.reviewsWithProblems > problemReviews.length" class="pt-2 text-center">
-                            <Link href="/reviews">
+                            <Link href="/reviews?problems=true">
                                 <Button variant="outline" size="sm">
                                     Alle {{ stats.reviewsWithProblems }} Problem-Reviews anzeigen
                                     <ArrowRight class="ml-2 h-4 w-4" />

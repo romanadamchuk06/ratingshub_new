@@ -22,8 +22,9 @@ import ReviewCard from '../components/ReviewCard.vue';
 import ReviewCardSkeleton from '../components/ReviewCardSkeleton.vue';
 import SimpleTooltip from '@/components/ui/tooltip/SimpleTooltip.vue';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/composables/useToast';
-import { Star, Link2, RefreshCw } from 'lucide-vue-next';
+import { Star, Link2, RefreshCw, X } from 'lucide-vue-next';
 
 const { toast } = useToast();
 
@@ -63,8 +64,72 @@ const syncing = ref(false);
 // State für Loading (wird true während Navigation/Filter-Änderungen)
 const loading = ref(true); // Startet als true für Initial-Loading
 
+// Filter State
+const selectedStatus = ref(props.filters?.status || null);
+const selectedRating = ref(props.filters?.rating || null);
+const showOnlyProblems = ref(props.filters?.problems === 'true' || props.filters?.problems === '1');
+
 // Location-Auswahl ist jetzt im LocationSelector integriert
 // Keine separate Warning-Box mehr nötig
+
+/**
+ * Filter anwenden - navigiert zur gefilterten Seite
+ */
+const applyFilters = () => {
+    const params = new URLSearchParams();
+
+    // Location-Filter (vom LocationSelector)
+    if (props.selectedLocationIds.length > 0) {
+        params.append('locations', props.selectedLocationIds.join(','));
+    }
+
+    // Status-Filter
+    if (selectedStatus.value) {
+        params.append('status', selectedStatus.value);
+    }
+
+    // Rating-Filter
+    if (selectedRating.value) {
+        params.append('rating', selectedRating.value);
+    }
+
+    // Problem-Filter
+    if (showOnlyProblems.value) {
+        params.append('problems', 'true');
+    }
+
+    // Highlight-Parameter beibehalten (falls vorhanden)
+    const currentParams = new URLSearchParams(window.location.search);
+    const highlightId = currentParams.get('highlight');
+    if (highlightId) {
+        params.append('highlight', highlightId);
+    }
+
+    // Navigate mit Filtern (Hash beibehalten)
+    const queryString = params.toString();
+    const hash = window.location.hash;
+    router.get((queryString ? `/reviews?${queryString}` : '/reviews') + hash);
+};
+
+/**
+ * Einzelnen Filter zurücksetzen
+ */
+const clearFilter = (filterName) => {
+    if (filterName === 'status') selectedStatus.value = null;
+    if (filterName === 'rating') selectedRating.value = null;
+    if (filterName === 'problems') showOnlyProblems.value = false;
+    applyFilters();
+};
+
+/**
+ * Alle Filter zurücksetzen
+ */
+const clearAllFilters = () => {
+    selectedStatus.value = null;
+    selectedRating.value = null;
+    showOnlyProblems.value = false;
+    router.get('/reviews');
+};
 
 /**
  * Scrollt zu einem bestimmten Review und hebt ihn hervor
@@ -96,20 +161,27 @@ const scrollToReview = (reviewId) => {
 /**
  * Initial Loading State
  * Zeigt kurz Skeleton-Animation beim ersten Laden für bessere UX
- * Prüft auch ob ein Review hervorgehoben werden soll (via Hash-Anker)
+ * Prüft auch ob ein Review hervorgehoben werden soll (via Query-Parameter oder Hash-Anker)
  */
 onMounted(() => {
-    // Prüfe ob ein Review hervorgehoben werden soll (z.B. #review-457)
-    const hash = window.location.hash; // z.B. "#review-457"
-    const reviewIdMatch = hash.match(/#review-(\d+)/);
-    const highlightId = reviewIdMatch ? reviewIdMatch[1] : null;
+    // Prüfe ob ein Review hervorgehoben werden soll
+    // Priorität 1: Query-Parameter (?highlight=457)
+    const urlParams = new URLSearchParams(window.location.search);
+    let highlightId = urlParams.get('highlight');
+
+    // Priorität 2: Hash-Anker (#review-457)
+    if (!highlightId) {
+        const hash = window.location.hash; // z.B. "#review-457"
+        const reviewIdMatch = hash.match(/#review-(\d+)/);
+        highlightId = reviewIdMatch ? reviewIdMatch[1] : null;
+    }
 
     if (hasPlatformConnected.value && props.reviews.data?.length > 0) {
         // Kurzes Loading für Skeleton-Animation (nur wenn Reviews vorhanden)
         setTimeout(() => {
             loading.value = false;
 
-            // Nach dem Laden zum Review scrollen (falls Hash-Anker vorhanden)
+            // Nach dem Laden zum Review scrollen (falls highlight vorhanden)
             if (highlightId) {
                 setTimeout(() => {
                     scrollToReview(parseInt(highlightId));
@@ -238,15 +310,58 @@ const currentFlashMessage = computed(() => {
                 </div>
             </div>
 
-            <!-- Filter Bar (temporarily disabled - Select component will be added later) -->
+            <!-- Filter Bar -->
             <div
-                v-if="false && hasPlatformConnected && (reviews.data?.length > 0 || filters.status || filters.rating)"
+                v-if="hasPlatformConnected"
                 class="flex flex-wrap items-center gap-3 p-4 rounded-lg border bg-card"
             >
-                <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium">Filter:</span>
-                </div>
-                <!-- Filters will be added when Select component is available -->
+                <span class="text-sm font-medium mr-2">Filter:</span>
+
+                <!-- Problem-Reviews Toggle -->
+                <Button
+                    @click="() => { showOnlyProblems = !showOnlyProblems; applyFilters(); }"
+                    :variant="showOnlyProblems ? 'default' : 'outline'"
+                    size="sm"
+                >
+                    🚨 Nur Problem-Reviews
+                </Button>
+
+                <!-- Status Filter -->
+                <Select :model-value="selectedStatus" @update:model-value="(val) => { selectedStatus = val; applyFilters(); }">
+                    <SelectTrigger class="w-[180px]">
+                        <SelectValue placeholder="Status auswählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="pending">Ausstehend</SelectItem>
+                        <SelectItem value="responded">Beantwortet</SelectItem>
+                        <SelectItem value="archived">Archiviert</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <!-- Rating Filter -->
+                <Select :model-value="selectedRating" @update:model-value="(val) => { selectedRating = val; applyFilters(); }">
+                    <SelectTrigger class="w-[180px]">
+                        <SelectValue placeholder="Bewertung" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="5">⭐⭐⭐⭐⭐ (5 Sterne)</SelectItem>
+                        <SelectItem value="4">⭐⭐⭐⭐ (4 Sterne)</SelectItem>
+                        <SelectItem value="3">⭐⭐⭐ (3 Sterne)</SelectItem>
+                        <SelectItem value="2">⭐⭐ (2 Sterne)</SelectItem>
+                        <SelectItem value="1">⭐ (1 Stern)</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <!-- Filter zurücksetzen Button (nur anzeigen wenn Filter aktiv) -->
+                <Button
+                    v-if="selectedStatus || selectedRating || showOnlyProblems"
+                    @click="clearAllFilters"
+                    variant="ghost"
+                    size="sm"
+                >
+                    <X class="mr-2 h-4 w-4" />
+                    Alle Filter zurücksetzen
+                </Button>
             </div>
 
             <!-- Reviews List -->

@@ -45,6 +45,8 @@ class ReviewController extends Controller
         $selectedLocationIds = $request->input('locations', []); // Filter nach Plattformen
         $status = $request->input('status'); // Filter nach Status (pending, responded, archived)
         $rating = $request->input('rating'); // Filter nach Rating (1-5)
+        $problems = $request->input('problems'); // Filter nach Problem-Reviews (mit negativen Sentiments)
+        $highlightReviewId = $request->input('highlight'); // Review-ID zum Hervorheben
 
         // Query Builder für Reviews
         $query = Review::query()
@@ -72,8 +74,36 @@ class ReviewController extends Controller
             $query->where('rating', $rating);
         }
 
+        // Filter nach Problem-Reviews (nur Reviews mit negativen Sentiments)
+        // Prüfe ob problems Parameter gesetzt ist (true, 1, 'true', '1')
+        if ($problems && ($problems === 'true' || $problems === '1' || $problems === 1 || $problems === true)) {
+            $query->whereHas('sentiments', function ($q) {
+                $q->where('sentiment', 'negative');
+            });
+            // Optional: Nur unbeantwortete anzeigen wenn 'only_pending' gesetzt ist
+            // ->whereNotIn('status', ['responded', 'archived']);
+        }
+
+        // Wenn ein Review hervorgehoben werden soll, finde die richtige Seite
+        $currentPage = 1;
+        if ($highlightReviewId) {
+            // Klone Query um Position zu finden
+            $positionQuery = clone $query;
+
+            // Hole alle IDs in der richtigen Reihenfolge
+            $allReviewIds = $positionQuery->pluck('id')->toArray();
+
+            // Finde Position des highlight-Reviews (0-basiert)
+            $position = array_search((int)$highlightReviewId, $allReviewIds);
+
+            if ($position !== false) {
+                // Berechne Seitennummer (20 Reviews pro Seite)
+                $currentPage = floor($position / 20) + 1;
+            }
+        }
+
         // Pagination: 20 Reviews pro Seite
-        $reviews = $query->paginate(20);
+        $reviews = $query->paginate(20, ['*'], 'page', $currentPage);
 
         return Inertia::render('Reviews', [
             'reviews' => $reviews,
@@ -83,6 +113,7 @@ class ReviewController extends Controller
             'filters' => [
                 'status' => $status,
                 'rating' => $rating,
+                'problems' => $problems,
             ],
         ]);
     }
