@@ -19,6 +19,19 @@ Schedule::command('subscription:cleanup-grace-periods')
     ->emailOutputOnFailure(env('ADMIN_EMAIL', 'admin@example.com'));
 
 /**
+ * Review-Synchronisierung:
+ * - Läuft alle 30 Minuten
+ * - Holt automatisch neue Reviews von allen verbundenen Plattformen (Google My Business, etc.)
+ * - Speichert neue Reviews in der Datenbank
+ * - withoutOverlapping verhindert dass es parallel läuft (falls es länger als 30 Min dauert)
+ */
+Schedule::command('reviews:sync')
+    ->everyThirtyMinutes()
+    ->timezone('Europe/Berlin')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+/**
  * Review Sentiment-Analyse:
  * - Läuft alle 6 Stunden
  * - Analysiert nur neue Reviews (die noch keine Sentiments haben)
