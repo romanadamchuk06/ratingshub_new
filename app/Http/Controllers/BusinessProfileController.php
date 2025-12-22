@@ -3,28 +3,26 @@
 namespace App\Http\Controllers;
 
 use App\Models\BusinessProfile;
+use App\Models\ConnectedPlatform;
+use App\Services\GoogleMyBusinessService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 /**
  * BusinessProfileController
  *
- * Verwaltet das Unternehmensprofil des Users:
- * - Firmendaten (Name, Beschreibung, Branche)
- * - Kontaktdaten
- * - Adresse
- * - Öffnungszeiten
- * - Logo
- * - Social Media Links
+ * Verwaltet die Öffnungszeiten des Unternehmens
+ * Synchronisiert mit Google My Business API
  */
 class BusinessProfileController extends Controller
 {
     /**
-     * Zeigt das Edit-Formular für das Business Profile
+     * Zeigt das Edit-Formular für Öffnungszeiten
      *
-     * Wenn User noch kein Business Profile hat, wird automatisch eins erstellt
+     * Lädt Öffnungszeiten direkt von Google My Business (falls verbunden)
+     * Keine Default-Werte!
      */
-    public function edit()
+    public function edit(GoogleMyBusinessService $googleService)
     {
         $user = auth()->user();
 
@@ -32,49 +30,66 @@ class BusinessProfileController extends Controller
         $businessProfile = $user->businessProfile()->firstOrCreate(
             ['user_id' => $user->id],
             [
-                'business_name' => $user->name,
-                'opening_hours' => BusinessProfile::getDefaultOpeningHours(),
-                'country' => 'Deutschland',
+                'opening_hours' => null, // Keine Default-Werte!
             ]
         );
 
-        return Inertia::render('Settings/BusinessProfile', [
+        // Versuche Öffnungszeiten von Google zu laden
+        $googlePlatform = $user->connectedPlatforms()
+            ->where('provider', 'google')
+            ->where('is_active', true)
+            ->first();
+
+        if ($googlePlatform) {
+            try {
+                $googleHours = $googleService->getBusinessHours($googlePlatform);
+                $businessProfile->opening_hours = $googleHours;
+            } catch (\Exception $e) {
+                // Fehler beim Laden von Google - verwende gespeicherte Zeiten
+                \Log::error('Fehler beim Laden der Google Öffnungszeiten: ' . $e->getMessage());
+            }
+        }
+
+        return Inertia::render('settings/BusinessProfile', [
             'businessProfile' => $businessProfile,
         ]);
     }
 
     /**
-     * Aktualisiert das Business Profile
+     * Aktualisiert die Öffnungszeiten
+     * Synchronisiert mit Google My Business
      */
-    public function update(Request $request)
+    public function update(Request $request, GoogleMyBusinessService $googleService)
     {
         $user = auth()->user();
 
         $validated = $request->validate([
-            'business_name' => 'nullable|string|max:255',
-            'description' => 'nullable|string|max:5000',
-            'industry' => 'nullable|string|max:255',
-            'phone' => 'nullable|string|max:50',
-            'email' => 'nullable|email|max:255',
-            'website' => 'nullable|url|max:255',
-            'street' => 'nullable|string|max:255',
-            'city' => 'nullable|string|max:255',
-            'postal_code' => 'nullable|string|max:20',
-            'country' => 'nullable|string|max:255',
-            'opening_hours' => 'nullable|array',
+            'opening_hours' => 'required|array',
             'opening_hours.*.open' => 'nullable|string',
             'opening_hours.*.close' => 'nullable|string',
             'opening_hours.*.closed' => 'nullable|boolean',
-            'social_links' => 'nullable|array',
-            'social_links.facebook' => 'nullable|url|max:255',
-            'social_links.instagram' => 'nullable|url|max:255',
-            'social_links.twitter' => 'nullable|url|max:255',
-            'social_links.linkedin' => 'nullable|url|max:255',
         ]);
 
+        // Speichere lokal
         $businessProfile = $user->businessProfile()->firstOrCreate(['user_id' => $user->id]);
         $businessProfile->update($validated);
 
-        return back()->with('success', 'Unternehmensprofil wurde erfolgreich aktualisiert! ✅');
+        // Versuche mit Google zu synchronisieren
+        $googlePlatform = $user->connectedPlatforms()
+            ->where('provider', 'google')
+            ->where('is_active', true)
+            ->first();
+
+        if ($googlePlatform) {
+            try {
+                $googleService->updateBusinessHours($googlePlatform, $validated['opening_hours']);
+                return back()->with('success', 'Öffnungszeiten erfolgreich mit Google My Business synchronisiert! ✅');
+            } catch (\Exception $e) {
+                \Log::error('Fehler beim Synchronisieren der Öffnungszeiten mit Google: ' . $e->getMessage());
+                return back()->with('error', 'Fehler beim Synchronisieren mit Google: ' . $e->getMessage());
+            }
+        }
+
+        return back()->with('success', 'Öffnungszeiten gespeichert! ✅');
     }
 }

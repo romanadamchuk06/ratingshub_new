@@ -505,4 +505,203 @@ class GoogleMyBusinessService
 
         return true;
     }
+
+    /**
+     * Holt Öffnungszeiten von Google My Business Location
+     *
+     * GET https://mybusinessbusinessinformation.googleapis.com/v1/{accountName}/locations
+     * mit readMask=name,title,regularHours
+     *
+     * @param ConnectedPlatform $platform
+     * @return array Öffnungszeiten im Format ['monday' => ['open' => '09:00', 'close' => '17:00', 'closed' => false], ...]
+     * @throws \Exception
+     */
+    public function getBusinessHours(ConnectedPlatform $platform): array
+    {
+        $token = $this->getAccessToken($platform);
+        $locationName = $platform->metadata['location_name'] ?? null;
+        $accountName = $platform->metadata['account_name'] ?? null;
+
+        if (!$locationName || !$accountName) {
+            throw new \Exception('Location oder Account Name nicht gefunden.');
+        }
+
+        // Locations List API nutzen (nicht direkt Location abrufen, da das 404 gibt)
+        $response = Http::withToken($token)
+            ->get(self::BUSINESS_INFO_API . "/{$accountName}/locations", [
+                'readMask' => 'name,title,regularHours',
+            ]);
+
+        if (!$response->successful()) {
+            throw new \Exception('Fehler beim Abrufen der Locations: ' . $response->body());
+        }
+
+        $data = $response->json();
+        $locations = $data['locations'] ?? [];
+
+        // Finde die richtige Location
+        $location = collect($locations)->firstWhere('name', $locationName);
+
+        if (!$location) {
+            throw new \Exception('Location nicht gefunden in der Liste.');
+        }
+
+        // Öffnungszeiten konvertieren
+        $periods = $location['regularHours']['periods'] ?? [];
+
+        return $this->convertGoogleHoursToOurFormat($periods);
+    }
+
+    /**
+     * Aktualisiert Öffnungszeiten bei Google My Business
+     *
+     * PATCH https://mybusinessbusinessinformation.googleapis.com/v1/{locationName}
+     *
+     * @param ConnectedPlatform $platform
+     * @param array $openingHours Unsere Öffnungszeiten
+     * @return bool
+     * @throws \Exception
+     */
+    public function updateBusinessHours(ConnectedPlatform $platform, array $openingHours): bool
+    {
+        $token = $this->getAccessToken($platform);
+        $locationName = $platform->metadata['location_name'] ?? null;
+
+        if (!$locationName) {
+            throw new \Exception('Location Name nicht gefunden.');
+        }
+
+        // Konvertiere unsere Öffnungszeiten zu Google Format
+        $periods = $this->convertOurHoursToGoogleFormat($openingHours);
+
+        $url = self::BUSINESS_INFO_API . "/{$locationName}";
+
+        $response = Http::withToken($token)
+            ->patch($url . '?updateMask=regularHours', [
+                'regularHours' => [
+                    'periods' => $periods,
+                ],
+            ]);
+
+        if (!$response->successful()) {
+            Log::error('Google Business Hours Update fehlgeschlagen', [
+                'location' => $locationName,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            throw new \Exception('Öffnungszeiten konnten nicht aktualisiert werden: ' . $response->body());
+        }
+
+        return true;
+    }
+
+    /**
+     * Konvertiert Google Öffnungszeiten zu unserem Format
+     *
+     * Google Format: [{ openDay: "MONDAY", openTime: {hours: 9, minutes: 0}, closeDay: "MONDAY", closeTime: {hours: 17, minutes: 0} }]
+     * Unser Format: { monday: { open: "09:00", close: "17:00", closed: false }, ... }
+     */
+    private function convertGoogleHoursToOurFormat(array $periods): array
+    {
+        $days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        $result = [];
+
+        // Initialisiere alle Tage als geschlossen
+        foreach ($days as $day) {
+            $result[$day] = [
+                'open' => '00:00',
+                'close' => '00:00',
+                'closed' => true,
+            ];
+        }
+
+        // Konvertiere Google Periods
+        foreach ($periods as $period) {
+            $openDay = strtolower($period['openDay'] ?? '');
+            $closeDay = strtolower($period['closeDay'] ?? '');
+
+            if (in_array($openDay, $days)) {
+                $result[$openDay] = [
+                    'open' => $this->parseGoogleTime($period['openTime'] ?? []),
+                    'close' => $this->parseGoogleTime($period['closeTime'] ?? []),
+                    'closed' => false,
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Konvertiert unsere Öffnungszeiten zu Google Format
+     */
+    private function convertOurHoursToGoogleFormat(array $openingHours): array
+    {
+        $dayMapping = [
+            'monday' => 'MONDAY',
+            'tuesday' => 'TUESDAY',
+            'wednesday' => 'WEDNESDAY',
+            'thursday' => 'THURSDAY',
+            'friday' => 'FRIDAY',
+            'saturday' => 'SATURDAY',
+            'sunday' => 'SUNDAY',
+        ];
+
+        $periods = [];
+
+        foreach ($openingHours as $day => $hours) {
+            if (!isset($dayMapping[$day]) || ($hours['closed'] ?? true)) {
+                continue; // Überspringe geschlossene Tage
+            }
+
+            $periods[] = [
+                'openDay' => $dayMapping[$day],
+                'openTime' => $this->formatTimeForGoogle($hours['open'] ?? '09:00'),
+                'closeDay' => $dayMapping[$day],
+                'closeTime' => $this->formatTimeForGoogle($hours['close'] ?? '17:00'),
+            ];
+        }
+
+        return $periods;
+    }
+
+    /**
+     * Parst Google Time Format zu "HH:MM"
+     *
+     * Google: { hours: 9, minutes: 0 } oder [] (wenn 00:00)
+     * Output: "09:00"
+     */
+    private function parseGoogleTime($time): string
+    {
+        if (empty($time)) {
+            return '00:00';
+        }
+
+        $hours = $time['hours'] ?? 0;
+        $minutes = $time['minutes'] ?? 0;
+
+        // Google nutzt manchmal hours: 24 für Mitternacht → 23:59
+        if ($hours >= 24) {
+            return '23:59';
+        }
+
+        return sprintf('%02d:%02d', $hours, $minutes);
+    }
+
+    /**
+     * Formatiert "HH:MM" zu Google Time Format
+     *
+     * Input: "09:00"
+     * Output: { hours: 9, minutes: 0 }
+     */
+    private function formatTimeForGoogle(string $time): array
+    {
+        [$hours, $minutes] = explode(':', $time);
+
+        return [
+            'hours' => (int) $hours,
+            'minutes' => (int) $minutes,
+        ];
+    }
 }

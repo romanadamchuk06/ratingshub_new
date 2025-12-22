@@ -8,8 +8,10 @@ import EmptyState from '../components/EmptyState.vue';
 import LocationSelector from '../components/LocationSelector.vue';
 import ReviewCard from '../components/ReviewCard.vue';
 import SentimentTag from '../components/SentimentTag.vue';
+import RatingTrendChart from '../components/charts/RatingTrendChart.vue';
+import RatingDistributionChart from '../components/charts/RatingDistributionChart.vue';
 import { Button } from '@/components/ui/button';
-import { Star, TrendingUp, MessageSquare, Award, Link2, ArrowRight, AlertTriangle } from 'lucide-vue-next';
+import { Star, TrendingUp, MessageSquare, Award, Link2, ArrowRight, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-vue-next';
 
 const props = defineProps({
     connectedPlatforms: {
@@ -38,6 +40,16 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    chartData: {
+        type: Object,
+        default: () => ({
+            ratingTrend: {
+                labels: [],
+                values: []
+            },
+            ratingDistribution: {}
+        }),
+    },
 });
 
 const page = usePage();
@@ -45,6 +57,7 @@ const hasPlatformConnected = computed(() => page.props.auth.hasPlatformConnected
 
 const showModal = ref(false);
 const loadingStats = ref(true);
+const showProblemDetails = ref(false);
 
 // Kategorie-Namen für Problem-Beschreibungen
 const categoryNames = {
@@ -147,7 +160,7 @@ const closeModal = () => {
             <!-- Reviews mit Problemen - Handlungsbedarf! -->
             <div
                 v-if="hasPlatformConnected && problemReviews.length > 0"
-                class="rounded-xl border border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-red-950/20"
+                class="rounded-xl border border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-red-950/20 overflow-hidden"
             >
                 <div class="border-b border-red-200 dark:border-red-900/30 p-6 flex items-center justify-between">
                     <div class="flex items-center gap-3">
@@ -163,8 +176,28 @@ const closeModal = () => {
                             </p>
                         </div>
                     </div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        @click="showProblemDetails = !showProblemDetails"
+                        class="text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-100"
+                    >
+                        {{ showProblemDetails ? 'Weniger' : 'Details' }}
+                        <ChevronDown v-if="!showProblemDetails" class="ml-2 h-4 w-4" />
+                        <ChevronUp v-else class="ml-2 h-4 w-4" />
+                    </Button>
                 </div>
-                <div class="p-6">
+
+                <!-- Collapsible Problem Details -->
+                <Transition
+                    enter-active-class="transition-all duration-300 ease-out"
+                    enter-from-class="opacity-0 max-h-0"
+                    enter-to-class="opacity-100 max-h-[2000px]"
+                    leave-active-class="transition-all duration-300 ease-in"
+                    leave-from-class="opacity-100 max-h-[2000px]"
+                    leave-to-class="opacity-0 max-h-0"
+                >
+                    <div v-show="showProblemDetails" class="p-6 border-t border-red-200 dark:border-red-900/30">
                     <div class="space-y-4">
                         <div
                             v-for="review in problemReviews"
@@ -247,6 +280,20 @@ const closeModal = () => {
                             </Link>
                         </div>
                     </div>
+                    </div>
+                </Transition>
+            </div>
+
+            <!-- Charts -->
+            <div v-if="hasPlatformConnected && stats.totalReviews > 0" class="grid gap-6 lg:grid-cols-2">
+                <div class="rounded-xl border bg-card p-6">
+                    <h3 class="font-semibold mb-4">Bewertungsverlauf (30 Tage)</h3>
+                    <RatingTrendChart :data="chartData.ratingTrend" />
+                </div>
+
+                <div class="rounded-xl border bg-card p-6">
+                    <h3 class="font-semibold mb-4">Sterne-Verteilung</h3>
+                    <RatingDistributionChart :data="chartData.ratingDistribution" />
                 </div>
             </div>
 
