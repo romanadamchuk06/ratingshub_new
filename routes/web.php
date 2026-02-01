@@ -33,9 +33,25 @@ Route::get('/', function () {
 
     return Inertia::render('WelcomeNew', [
         'canRegister' => Features::enabled(Features::registration()),
+        'isAuthenticated' => auth()->check(), // Ist User eingeloggt?
         'plans' => $plans,
     ]);
 })->name('home');
+
+/**
+ * RECHTLICHE SEITEN (öffentlich zugänglich)
+ * ==========================================
+ *
+ * Diese Seiten sind Pflicht für gewerbliche Websites in Deutschland:
+ * - Impressum (§ 5 DDG)
+ * - Datenschutzerklärung (Art. 13/14 DSGVO)
+ * - AGB (optional, aber empfohlen für SaaS)
+ * - Widerrufsbelehrung (für Verbraucherverträge)
+ */
+Route::get('/impressum', fn() => Inertia::render('Legal/Impressum'))->name('impressum');
+Route::get('/datenschutz', fn() => Inertia::render('Legal/Datenschutz'))->name('datenschutz');
+Route::get('/agb', fn() => Inertia::render('Legal/AGB'))->name('agb');
+Route::get('/widerruf', fn() => Inertia::render('Legal/Widerruf'))->name('widerruf');
 
 // Test routes for error pages (remove in production)
 Route::get('/404', function () {

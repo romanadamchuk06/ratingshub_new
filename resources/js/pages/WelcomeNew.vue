@@ -33,8 +33,8 @@ import {
 } from 'lucide-vue-next';
 
 defineProps({
-    canLogin: Boolean,
     canRegister: Boolean,
+    isAuthenticated: Boolean, // Ist User eingeloggt?
     plans: Array, // Plans aus der Datenbank
 });
 
@@ -138,7 +138,16 @@ const toggleFaq = (index) => {
 
                     <!-- Auth Buttons -->
                     <div class="flex items-center gap-3">
-                        <template v-if="canLogin">
+                        <!-- Eingeloggt: Dashboard-Button -->
+                        <template v-if="isAuthenticated">
+                            <Link href="/dashboard">
+                                <Button size="sm">
+                                    Zum Dashboard
+                                </Button>
+                            </Link>
+                        </template>
+                        <!-- Nicht eingeloggt: Login & Register -->
+                        <template v-else>
                             <Link href="/login">
                                 <Button variant="ghost" size="sm">
                                     Anmelden
@@ -147,13 +156,6 @@ const toggleFaq = (index) => {
                             <Link v-if="canRegister" href="/register">
                                 <Button size="sm">
                                     Kostenlos starten
-                                </Button>
-                            </Link>
-                        </template>
-                        <template v-else>
-                            <Link href="/dashboard">
-                                <Button size="sm">
-                                    Zum Dashboard
                                 </Button>
                             </Link>
                         </template>
@@ -604,15 +606,16 @@ const toggleFaq = (index) => {
                     <div>
                         <h3 class="font-semibold mb-4">Rechtliches</h3>
                         <ul class="space-y-2 text-sm text-muted-foreground">
-                            <li><a href="#" class="hover:text-foreground transition-colors">Impressum</a></li>
-                            <li><a href="#" class="hover:text-foreground transition-colors">Datenschutz</a></li>
-                            <li><a href="#" class="hover:text-foreground transition-colors">AGB</a></li>
+                            <li><Link href="/impressum" class="hover:text-foreground transition-colors">Impressum</Link></li>
+                            <li><Link href="/datenschutz" class="hover:text-foreground transition-colors">Datenschutz</Link></li>
+                            <li><Link href="/agb" class="hover:text-foreground transition-colors">AGB</Link></li>
+                            <li><Link href="/widerruf" class="hover:text-foreground transition-colors">Widerrufsbelehrung</Link></li>
                         </ul>
                     </div>
                 </div>
 
                 <div class="border-t mt-12 pt-8 text-center text-sm text-muted-foreground">
-                    <p>© 2024 RatingsHub. Alle Rechte vorbehalten.</p>
+                    <p>© {{ new Date().getFullYear() }} RatingsHub. Alle Rechte vorbehalten.</p>
                 </div>
             </div>
         </footer>

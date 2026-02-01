@@ -22,7 +22,7 @@ import {
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import { Link, router } from '@inertiajs/vue3';
-import { LogOut, Settings, CreditCard, Package, Bug } from 'lucide-vue-next';
+import { LogOut, Settings, CreditCard, Package, Bug, Home } from 'lucide-vue-next';
 
 const handleLogout = () => {
     router.flushAll();
@@ -41,6 +41,14 @@ defineProps({
     </DropdownMenuLabel>
     <DropdownMenuSeparator />
     <DropdownMenuGroup>
+        <!-- Zur Website (Landingpage) -->
+        <DropdownMenuItem :as-child="true">
+            <Link class="block w-full" href="/" as="button">
+                <Home class="mr-2 h-4 w-4" />
+                Zur Website
+            </Link>
+        </DropdownMenuItem>
+
         <!-- Einstellungen -->
         <DropdownMenuItem :as-child="true">
             <Link class="block w-full" :href="edit()" prefetch as="button">
