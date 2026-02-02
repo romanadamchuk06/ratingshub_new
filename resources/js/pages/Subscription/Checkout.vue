@@ -1,12 +1,21 @@
 <script setup>
 /**
- * Checkout-Seite mit Monatlich/Jährlich Toggle
+ * Checkout-Seite mit Stripe Checkout Redirect
  *
- * Features:
- * - Toggle zwischen monatlicher und jährlicher Zahlung
- * - Promo Code Eingabe
- * - Stripe Elements für Kartenzahlung
- * - Kostenlose Aktivierung bei 100% Rabatt
+ * NEUER FLOW:
+ * 1. User sieht Plan-Zusammenfassung
+ * 2. Kann zwischen Monatlich/Jährlich wechseln
+ * 3. Kann Promo-Code eingeben
+ * 4. Klickt "Weiter zur Zahlung"
+ * 5. Wird zu Stripe Checkout weitergeleitet
+ * 6. Stripe wickelt Zahlung ab (Karte, Apple Pay, Google Pay, SEPA, etc.)
+ * 7. Redirect zurück zur Success-Seite
+ *
+ * VORTEILE gegenüber Stripe Elements:
+ * - Alle Zahlungsmethoden automatisch
+ * - PCI Compliance einfacher
+ * - Payment Links funktionieren
+ * - Weniger Frontend-Code
  */
 
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -17,8 +26,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { CreditCard, Lock, Check, AlertCircle, CheckCircle, XCircle } from 'lucide-vue-next';
-import { ref, onMounted, computed, watch } from 'vue';
+import { CreditCard, Lock, Check, AlertCircle, CheckCircle, XCircle, ExternalLink } from 'lucide-vue-next';
+import { ref, computed } from 'vue';
 import axios from 'axios';
 
 const props = defineProps({
@@ -30,16 +39,10 @@ const props = defineProps({
         type: Object,
         default: null,
     },
-    intent: {
-        type: Object,
-        required: true,
-    },
 });
 
 const loading = ref(false);
 const error = ref(null);
-const stripe = ref(null);
-const cardElement = ref(null);
 const promoCode = ref('');
 const promoCodeApplied = ref(null);
 const promoCodeError = ref(null);
@@ -54,8 +57,14 @@ const isYearly = computed(() => selectedPlan.value.billing_interval === 'yearly'
 // Toggle zwischen monatlich und jährlich
 const toggleInterval = () => {
     if (props.siblingPlan) {
-        selectedPlan.value = isYearly.value ? props.siblingPlan : props.plan;
-        // Wenn Plan gewechselt wird, Promo Code zurücksetzen
+        // Bestimme welcher Plan monatlich und welcher jährlich ist
+        const monthlyPlan = props.plan.billing_interval === 'monthly' ? props.plan : props.siblingPlan;
+        const yearlyPlan = props.plan.billing_interval === 'yearly' ? props.plan : props.siblingPlan;
+
+        // Wechsle zum anderen Plan
+        selectedPlan.value = isYearly.value ? monthlyPlan : yearlyPlan;
+
+        // Promo Code zurücksetzen bei Plan-Wechsel
         if (promoCodeApplied.value) {
             removePromoCode();
         }
@@ -77,41 +86,6 @@ const yearlySavings = computed(() => {
     return savings > 0 ? Math.round(savings * 12) : null;
 });
 
-onMounted(async () => {
-    if (window.Stripe) {
-        stripe.value = window.Stripe(import.meta.env.VITE_STRIPE_KEY);
-
-        const elements = stripe.value.elements();
-        cardElement.value = elements.create('card', {
-            style: {
-                base: {
-                    fontSize: '16px',
-                    color: 'hsl(var(--foreground))',
-                    fontFamily: 'system-ui, sans-serif',
-                    '::placeholder': {
-                        color: 'hsl(var(--muted-foreground))',
-                    },
-                },
-                invalid: {
-                    color: 'hsl(var(--destructive))',
-                },
-            },
-        });
-
-        cardElement.value.mount('#card-element');
-
-        cardElement.value.on('change', (event) => {
-            if (event.error) {
-                error.value = event.error.message;
-            } else {
-                error.value = null;
-            }
-        });
-    } else {
-        error.value = 'Stripe konnte nicht geladen werden. Bitte lade die Seite neu.';
-    }
-});
-
 const validatePromoCode = async () => {
     if (!promoCode.value) return;
 
@@ -131,9 +105,9 @@ const validatePromoCode = async () => {
             promoCodeError.value = data.message || 'Ungültiger Promo Code';
             promoCodeApplied.value = null;
         }
-    } catch (error) {
-        if (error.response && error.response.data) {
-            promoCodeError.value = error.response.data.message || 'Ungültiger Promo Code';
+    } catch (err) {
+        if (err.response && err.response.data) {
+            promoCodeError.value = err.response.data.message || 'Ungültiger Promo Code';
         } else {
             promoCodeError.value = 'Fehler beim Validieren des Promo Codes';
         }
@@ -157,53 +131,24 @@ const finalPrice = computed(() => {
     return Number(selectedPlan.value.price);
 });
 
-// Braucht Zahlungsmethode?
-const requiresPaymentMethod = computed(() => {
-    return finalPrice.value > 0;
-});
-
-const handleSubmit = async () => {
+// Submit -> Redirect zu Stripe Checkout (oder direkte Aktivierung bei 100% Rabatt)
+const handleSubmit = () => {
     if (loading.value) return;
 
     loading.value = true;
     error.value = null;
 
-    try {
-        let paymentMethod = null;
-
-        if (requiresPaymentMethod.value) {
-            const { setupIntent, error: stripeError } = await stripe.value.confirmCardSetup(
-                props.intent.client_secret,
-                {
-                    payment_method: {
-                        card: cardElement.value,
-                    },
-                }
-            );
-
-            if (stripeError) {
-                error.value = stripeError.message;
-                loading.value = false;
-                return;
-            }
-
-            paymentMethod = setupIntent.payment_method;
-        }
-
-        router.post(`/subscription/subscribe/${selectedPlan.value.id}`, {
-            payment_method: paymentMethod,
-            promo_code: promoCodeApplied.value ? promoCode.value : null,
-        }, {
-            onSuccess: () => {},
-            onError: (errors) => {
-                error.value = errors.message || 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.';
-                loading.value = false;
-            },
-        });
-    } catch (e) {
-        error.value = 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.';
-        loading.value = false;
-    }
+    // POST an Backend
+    // Promo Code wird nur mitgesendet wenn 100% Rabatt (kostenlose Aktivierung)
+    // Für Teil-Rabatte muss der Code bei Stripe eingegeben werden
+    router.post(`/subscription/subscribe/${selectedPlan.value.id}`, {
+        promo_code: (promoCodeApplied.value && finalPrice.value === 0) ? promoCode.value : null,
+    }, {
+        onError: (errors) => {
+            error.value = errors.error || 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.';
+            loading.value = false;
+        },
+    });
 };
 </script>
 
@@ -218,120 +163,159 @@ const handleSubmit = async () => {
             <!-- Header -->
             <div>
                 <h1 class="text-2xl font-bold tracking-tight md:text-3xl">Checkout</h1>
-                <p class="text-muted-foreground">Schließe deine Bestellung ab</p>
+                <p class="text-muted-foreground">Wähle deine Optionen und fahre zur Zahlung fort</p>
             </div>
 
             <div class="grid gap-6 lg:grid-cols-3">
-                <!-- Payment Form -->
-                <div class="lg:col-span-2">
+                <!-- Options -->
+                <div class="lg:col-span-2 space-y-6">
+                    <!-- Billing Interval Card -->
+                    <Card v-if="siblingPlan">
+                        <CardHeader>
+                            <CardTitle>Abrechnungszeitraum</CardTitle>
+                            <CardDescription>
+                                Wähle zwischen monatlicher und jährlicher Abrechnung
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div class="flex items-center gap-4 p-4 rounded-lg border bg-muted/30">
+                                <span
+                                    :class="[
+                                        'text-sm font-medium transition-colors cursor-pointer',
+                                        !isYearly ? 'text-foreground' : 'text-muted-foreground',
+                                    ]"
+                                    @click="!isYearly || toggleInterval()"
+                                >
+                                    Monatlich
+                                </span>
+                                <button
+                                    type="button"
+                                    @click="toggleInterval"
+                                    :class="[
+                                        'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                                        isYearly ? 'bg-primary' : 'bg-muted-foreground/30',
+                                    ]"
+                                >
+                                    <span
+                                        :class="[
+                                            'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                                            isYearly ? 'translate-x-6' : 'translate-x-1',
+                                        ]"
+                                    />
+                                </button>
+                                <span
+                                    :class="[
+                                        'text-sm font-medium transition-colors cursor-pointer',
+                                        isYearly ? 'text-foreground' : 'text-muted-foreground',
+                                    ]"
+                                    @click="isYearly || toggleInterval()"
+                                >
+                                    Jährlich
+                                </span>
+                                <Badge v-if="yearlySavings" variant="secondary" class="ml-auto text-xs">
+                                    Spare {{ yearlySavings }}€/Jahr
+                                </Badge>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <!-- Promo Code Card (nur für 100% Rabattcodes) -->
                     <Card>
                         <CardHeader>
-                            <CardTitle>Zahlungsinformationen</CardTitle>
+                            <CardTitle>Gutscheincode</CardTitle>
                             <CardDescription>
-                                Deine Zahlungsinformationen werden sicher über Stripe verarbeitet
+                                Hast du einen Gutscheincode für kostenlosen Zugang?
                             </CardDescription>
                         </CardHeader>
                         <CardContent class="space-y-4">
-                            <!-- Billing Interval Toggle (nur wenn Schwester-Plan existiert) -->
-                            <div v-if="siblingPlan" class="space-y-2">
-                                <Label>Abrechnungszeitraum</Label>
-                                <div class="flex items-center gap-4 p-3 rounded-lg border bg-muted/30">
-                                    <span
-                                        :class="[
-                                            'text-sm font-medium transition-colors',
-                                            !isYearly ? 'text-foreground' : 'text-muted-foreground',
-                                        ]"
-                                    >
-                                        Monatlich
-                                    </span>
-                                    <button
-                                        type="button"
-                                        @click="toggleInterval"
-                                        :class="[
-                                            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                                            isYearly ? 'bg-primary' : 'bg-muted-foreground/30',
-                                        ]"
-                                    >
-                                        <span
-                                            :class="[
-                                                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                                                isYearly ? 'translate-x-6' : 'translate-x-1',
-                                            ]"
-                                        />
-                                    </button>
-                                    <span
-                                        :class="[
-                                            'text-sm font-medium transition-colors',
-                                            isYearly ? 'text-foreground' : 'text-muted-foreground',
-                                        ]"
-                                    >
-                                        Jährlich
-                                    </span>
-                                    <Badge v-if="yearlySavings" variant="secondary" class="ml-auto text-xs">
-                                        Spare {{ yearlySavings }}€/Jahr
-                                    </Badge>
-                                </div>
+                            <div class="flex gap-2">
+                                <input
+                                    v-model="promoCode"
+                                    type="text"
+                                    placeholder="z.B. GRATIS100"
+                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                    :disabled="!!promoCodeApplied"
+                                    @keyup.enter="validatePromoCode"
+                                />
+                                <Button
+                                    v-if="!promoCodeApplied"
+                                    type="button"
+                                    variant="outline"
+                                    @click="validatePromoCode"
+                                    :disabled="!promoCode || validatingPromoCode"
+                                >
+                                    {{ validatingPromoCode ? 'Prüfe...' : 'Anwenden' }}
+                                </Button>
+                                <Button
+                                    v-else
+                                    type="button"
+                                    variant="outline"
+                                    @click="removePromoCode"
+                                >
+                                    Entfernen
+                                </Button>
                             </div>
 
-                            <!-- Card Element (nur wenn Zahlung erforderlich) -->
-                            <div v-if="requiresPaymentMethod" class="space-y-2">
-                                <Label for="card-element">Kreditkarte</Label>
-                                <div
-                                    id="card-element"
-                                    class="rounded-md border border-input bg-background px-3 py-2"
-                                ></div>
+                            <!-- Promo Code Success -->
+                            <div v-if="promoCodeApplied && finalPrice === 0" class="rounded-lg bg-green-100 p-3 text-sm text-green-800 dark:bg-green-900/20 dark:text-green-500">
+                                <CheckCircle class="mr-2 inline h-4 w-4" />
+                                {{ promoCodeApplied.message }} - 100% Rabatt!
                             </div>
 
+                            <!-- Promo Code mit Teil-Rabatt: Hinweis auf Stripe -->
+                            <div v-else-if="promoCodeApplied && finalPrice > 0" class="rounded-lg bg-blue-100 p-3 text-sm text-blue-800 dark:bg-blue-900/20 dark:text-blue-500">
+                                <AlertCircle class="mr-2 inline h-4 w-4" />
+                                Dieser Code gibt {{ promoCodeApplied.discount.toFixed(2).replace('.', ',') }} € Rabatt.
+                                Gib den Code bei der Zahlung auf Stripe ein.
+                            </div>
+
+                            <!-- Promo Code Error -->
+                            <div v-if="promoCodeError" class="rounded-lg bg-red-100 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-500">
+                                <XCircle class="mr-2 inline h-4 w-4" />
+                                {{ promoCodeError }}
+                            </div>
+
+                            <p class="text-xs text-muted-foreground">
+                                Rabattcodes kannst du auch direkt bei Stripe während der Zahlung eingeben.
+                            </p>
+                        </CardContent>
+                    </Card>
+
+                    <!-- Payment Info Card -->
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Zahlung</CardTitle>
+                            <CardDescription>
+                                Die Zahlung wird sicher über Stripe abgewickelt
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent class="space-y-4">
                             <!-- Kostenlos-Hinweis -->
-                            <Alert v-else class="bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
+                            <Alert v-if="finalPrice === 0" class="bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
                                 <CheckCircle class="h-4 w-4 text-green-600 dark:text-green-500" />
                                 <AlertDescription class="text-green-800 dark:text-green-400">
-                                    Dieser Plan ist durch deinen Promo Code kostenlos! Keine Zahlungsinformationen erforderlich.
+                                    Durch deinen Promo Code ist dieser Plan kostenlos! Keine Zahlungsinformationen erforderlich.
                                 </AlertDescription>
                             </Alert>
 
-                            <!-- Promo Code -->
-                            <div class="space-y-2">
-                                <Label for="promo-code">Promo Code (optional)</Label>
-                                <div class="flex gap-2">
-                                    <input
-                                        v-model="promoCode"
-                                        type="text"
-                                        id="promo-code"
-                                        placeholder="z.B. WILLKOMMEN20"
-                                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                        :disabled="!!promoCodeApplied"
-                                        @keyup.enter="validatePromoCode"
-                                    />
-                                    <Button
-                                        v-if="!promoCodeApplied"
-                                        type="button"
-                                        variant="outline"
-                                        @click="validatePromoCode"
-                                        :disabled="!promoCode || validatingPromoCode"
-                                    >
-                                        {{ validatingPromoCode ? 'Prüfe...' : 'Anwenden' }}
-                                    </Button>
-                                    <Button
-                                        v-else
-                                        type="button"
-                                        variant="outline"
-                                        @click="removePromoCode"
-                                    >
-                                        Entfernen
-                                    </Button>
+                            <!-- Stripe Info -->
+                            <div v-else class="space-y-3">
+                                <div class="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+                                    <CreditCard class="h-8 w-8 text-muted-foreground" />
+                                    <div>
+                                        <p class="font-medium">Sichere Zahlung mit Stripe</p>
+                                        <p class="text-sm text-muted-foreground">
+                                            Kreditkarte, SEPA-Lastschrift, Apple Pay, Google Pay und mehr
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <!-- Promo Code Success -->
-                                <div v-if="promoCodeApplied" class="rounded-lg bg-green-100 p-3 text-sm text-green-800 dark:bg-green-900/20 dark:text-green-500">
-                                    <CheckCircle class="mr-2 inline h-4 w-4" />
-                                    {{ promoCodeApplied.message }} - Rabatt: {{ promoCodeApplied.discount.toFixed(2).replace('.', ',') }} €
-                                </div>
-
-                                <!-- Promo Code Error -->
-                                <div v-if="promoCodeError" class="rounded-lg bg-red-100 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-500">
-                                    <XCircle class="mr-2 inline h-4 w-4" />
-                                    {{ promoCodeError }}
+                                <div class="flex items-start gap-2 rounded-lg bg-muted p-3 text-sm">
+                                    <Lock class="h-4 w-4 flex-shrink-0 text-muted-foreground mt-0.5" />
+                                    <p class="text-muted-foreground">
+                                        Du wirst zu Stripe weitergeleitet, um die Zahlung sicher abzuschließen.
+                                        Wir speichern keine Zahlungsdaten auf unseren Servern.
+                                    </p>
                                 </div>
                             </div>
 
@@ -340,15 +324,6 @@ const handleSubmit = async () => {
                                 <AlertCircle class="h-4 w-4" />
                                 <AlertDescription>{{ error }}</AlertDescription>
                             </Alert>
-
-                            <!-- Security Notice -->
-                            <div class="flex items-start gap-2 rounded-lg bg-muted p-3 text-sm">
-                                <Lock class="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                                <p class="text-muted-foreground">
-                                    Deine Zahlungsinformationen werden verschlüsselt übertragen und sicher gespeichert.
-                                    Wir speichern keine Kreditkartendaten auf unseren Servern.
-                                </p>
-                            </div>
                         </CardContent>
                         <CardFooter>
                             <Button
@@ -357,16 +332,16 @@ const handleSubmit = async () => {
                                 class="w-full"
                                 size="lg"
                             >
-                                <CreditCard v-if="requiresPaymentMethod" class="mr-2 h-4 w-4" />
-                                <CheckCircle v-else class="mr-2 h-4 w-4" />
                                 <template v-if="loading">
-                                    Verarbeitung...
+                                    Weiterleitung...
                                 </template>
                                 <template v-else-if="finalPrice === 0">
-                                    Jetzt kostenlos starten
+                                    <CheckCircle class="mr-2 h-4 w-4" />
+                                    Jetzt kostenlos aktivieren
                                 </template>
                                 <template v-else>
-                                    Jetzt für {{ finalPrice.toFixed(2).replace('.', ',') }} €{{ isYearly ? '/Jahr' : '/Monat' }} starten
+                                    <ExternalLink class="mr-2 h-4 w-4" />
+                                    Weiter zur Zahlung ({{ finalPrice.toFixed(2).replace('.', ',') }} €{{ isYearly ? '/Jahr' : '/Monat' }})
                                 </template>
                             </Button>
                         </CardFooter>
@@ -375,14 +350,14 @@ const handleSubmit = async () => {
 
                 <!-- Order Summary -->
                 <div class="lg:col-span-1">
-                    <Card>
+                    <Card class="sticky top-4">
                         <CardHeader>
                             <CardTitle>Bestellübersicht</CardTitle>
                         </CardHeader>
                         <CardContent class="space-y-4">
                             <!-- Plan Details -->
                             <div>
-                                <p class="font-semibold">{{ selectedPlan.name }}</p>
+                                <p class="font-semibold text-lg">{{ selectedPlan.name }}</p>
                                 <p class="text-sm text-muted-foreground">{{ selectedPlan.description }}</p>
                                 <Badge v-if="isYearly" variant="secondary" class="mt-2">
                                     Jährliche Abrechnung

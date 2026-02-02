@@ -251,7 +251,7 @@ Route::middleware(['auth', 'verified'])->prefix('subscription')->name('subscript
     Route::get('/manage', [App\Http\Controllers\SubscriptionController::class, 'manage'])->name('manage');
     Route::post('/cancel', [App\Http\Controllers\SubscriptionController::class, 'cancel'])->name('cancel');
     Route::post('/resume', [App\Http\Controllers\SubscriptionController::class, 'resume'])->name('resume');
-    Route::post('/payment-method', [App\Http\Controllers\SubscriptionController::class, 'updatePaymentMethod'])->name('payment-method.update');
+    Route::get('/billing-portal', [App\Http\Controllers\SubscriptionController::class, 'billingPortal'])->name('billing-portal');
     Route::get('/invoice/{invoice}', [App\Http\Controllers\SubscriptionController::class, 'invoice'])->name('invoice');
 });
 

@@ -8,6 +8,8 @@ use App\Models\SubscriptionActivityLog;
 use App\Models\PromoCodeActivityLog;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Stripe\Stripe;
+use Stripe\Checkout\Session as StripeCheckoutSession;
 
 class SubscriptionController extends Controller
 {
@@ -28,6 +30,13 @@ class SubscriptionController extends Controller
 
     /**
      * Show checkout page for a plan.
+     *
+     * NEUER FLOW MIT STRIPE CHECKOUT:
+     * 1. Zeigt Plan-Zusammenfassung und Promo-Code Eingabe
+     * 2. User klickt "Weiter zur Zahlung"
+     * 3. Redirect zu Stripe Checkout Session
+     * 4. Stripe wickelt Zahlung ab (Karte, Apple Pay, Google Pay, SEPA, etc.)
+     * 5. Redirect zurück zur Success-Seite
      *
      * Lädt auch den Schwester-Plan (gleicher Name, anderes Intervall)
      * damit User im Checkout zwischen monatlich/jährlich wechseln können.
@@ -59,7 +68,7 @@ class SubscriptionController extends Controller
         return Inertia::render('Subscription/Checkout', [
             'plan' => $plan,
             'siblingPlan' => $siblingPlan, // Kann null sein wenn kein Schwester-Plan existiert
-            'intent' => $user->createSetupIntent(),
+            'stripeKey' => config('cashier.key'), // Für eventuelle Client-Side Nutzung
         ]);
     }
 
@@ -139,32 +148,31 @@ class SubscriptionController extends Controller
     }
 
     /**
-     * Process subscription.
+     * Process subscription via Stripe Checkout Session.
      *
-     * HYBRID-SYSTEM ERKLÄRUNG:
-     * ------------------------
-     * Diese App nutzt zwei verschiedene Systeme für Subscriptions:
+     * NEUER FLOW MIT STRIPE CHECKOUT:
+     * --------------------------------
+     * 1. User kommt von Checkout-Seite mit Plan-ID und optionalem Promo-Code
+     * 2. Wir erstellen eine Stripe Checkout Session
+     * 3. User wird zu Stripe weitergeleitet
+     * 4. Nach Zahlung: Redirect zur Success-Seite
+     * 5. Webhook (checkout.session.completed) erstellt die Subscription
      *
-     * 1. KOSTENLOSE PLÄNE (finalPrice = 0):
-     *    - Wird nur plan_id auf User gesetzt
-     *    - KEINE Cashier subscription in DB
-     *    - KEINE Stripe-Billing, keine Rechnungen
-     *    - Beispiel: Free-Plan, 100% Promo Code
+     * VORTEILE:
+     * - Stripe hosted Checkout (PCI compliant)
+     * - Alle Zahlungsmethoden: Karte, Apple Pay, Google Pay, SEPA, etc.
+     * - Payment Links funktionieren
+     * - Weniger eigener Code
      *
-     * 2. BEZAHLTE PLÄNE (finalPrice > 0):
-     *    - plan_id UND Cashier subscription werden gesetzt
-     *    - Stripe-Billing aktiv
-     *    - Rechnungen, Cancel/Resume funktioniert
-     *
-     * Warum zwei Systeme?
-     * - plan_id ist einfach und schnell für kostenlose Nutzung
-     * - Cashier subscription ist notwendig für automatische Zahlungen
+     * KOSTENLOSE PLÄNE (finalPrice = 0):
+     * - Werden direkt aktiviert ohne Stripe
      */
     public function subscribe(Request $request, Plan $plan)
     {
         $user = auth()->user();
 
         // Schritt 1: Preis berechnen (mit Promo Code falls vorhanden)
+        // NUR für 100% Rabatt-Codes (kostenlose Aktivierung)
         $finalPrice = $plan->price;
         $promoCode = null;
 
@@ -175,16 +183,8 @@ class SubscriptionController extends Controller
             }
         }
 
-        // Schritt 2: Zahlungsmethode nur bei bezahlten Plänen erforderlich
-        if ($finalPrice > 0) {
-            $request->validate([
-                'payment_method' => 'required|string',
-            ]);
-        }
-
         try {
-            // Schritt 3: Alte Cashier subscription löschen falls vorhanden
-            // (verhindert mehrere aktive subscriptions)
+            // Alte Cashier subscription löschen falls vorhanden
             if ($user->subscribed('default')) {
                 $user->subscription('default')->cancelNow();
             }
@@ -192,15 +192,15 @@ class SubscriptionController extends Controller
             // ========================================
             // PFAD 1: KOSTENLOSER PLAN (finalPrice = 0)
             // ========================================
+            // Gilt für: Free-Plan ODER 100% Rabatt-Code
             if ($finalPrice == 0) {
-                // Nur plan_id setzen, KEINE Cashier subscription
+                // Nur plan_id setzen, KEINE Stripe Session nötig
                 $user->update(['plan_id' => $plan->id]);
 
                 // Promo Code als verwendet markieren
                 if ($promoCode) {
                     $promoCode->markAsUsed($user);
 
-                    // LOG: Promo-Code verwendet
                     PromoCodeActivityLog::log(
                         performedBy: $user,
                         promoCode: $promoCode,
@@ -208,14 +208,13 @@ class SubscriptionController extends Controller
                         usedBy: $user,
                         changes: [
                             'plan' => $plan->name,
-                            'discount' => $promoCode->discount_value . ($promoCode->discount_type === 'percentage' ? '%' : '€'),
+                            'discount' => $promoCode->value . ($promoCode->type === 'percentage' ? '%' : '€'),
                             'final_price' => $finalPrice,
                         ],
                         description: "Promo-Code '{$promoCode->code}' verwendet für Plan '{$plan->name}'"
                     );
                 }
 
-                // LOG: Kostenlose Subscription erstellt
                 SubscriptionActivityLog::log(
                     performedBy: $user,
                     targetUser: $user,
@@ -235,59 +234,50 @@ class SubscriptionController extends Controller
             }
 
             // ========================================
-            // PFAD 2: BEZAHLTER PLAN (finalPrice > 0)
+            // PFAD 2: STRIPE CHECKOUT SESSION
             // ========================================
+            // Für alle bezahlten Pläne - Stripe übernimmt alles
 
-            // Cashier subscription erstellen (wird in 'subscriptions' Tabelle gespeichert)
-            $subscription = $user->newSubscription('default', $plan->stripe_plan_id);
+            // Stripe API initialisieren
+            Stripe::setApiKey(config('cashier.secret'));
 
-            // Promo Code als verwendet markieren
-            if ($promoCode) {
-                $promoCode->markAsUsed($user);
-
-                // LOG: Promo-Code verwendet
-                PromoCodeActivityLog::log(
-                    performedBy: $user,
-                    promoCode: $promoCode,
-                    action: 'used',
-                    usedBy: $user,
-                    changes: [
-                        'plan' => $plan->name,
-                        'discount' => $promoCode->discount_value . ($promoCode->discount_type === 'percentage' ? '%' : '€'),
-                        'original_price' => $plan->price,
-                        'final_price' => $finalPrice,
-                    ],
-                    description: "Promo-Code '{$promoCode->code}' verwendet für Plan '{$plan->name}'"
-                );
+            // Stripe Customer erstellen/abrufen
+            if (!$user->stripe_id) {
+                $user->createAsStripeCustomer();
             }
 
-            // Stripe subscription mit Zahlungsmethode erstellen
-            $stripeSubscription = $subscription->create($request->payment_method);
-
-            // plan_id ebenfalls setzen (für schnellen Zugriff auf Plan-Details)
-            $user->update(['plan_id' => $plan->id]);
-
-            // LOG: Bezahlte Subscription erstellt
-            SubscriptionActivityLog::log(
-                performedBy: $user,
-                targetUser: $user,
-                plan: $plan,
-                action: 'subscribed',
-                changes: [
-                    'plan' => $plan->name,
-                    'price' => $finalPrice,
-                    'promo_code' => $promoCode?->code,
-                    'type' => 'paid',
+            // Checkout Session erstellen
+            $checkoutSession = StripeCheckoutSession::create([
+                'customer' => $user->stripe_id,
+                'mode' => 'subscription',
+                'line_items' => [[
+                    'price' => $plan->stripe_plan_id,
+                    'quantity' => 1,
+                ]],
+                'success_url' => route('subscription.success') . '?session_id={CHECKOUT_SESSION_ID}',
+                'cancel_url' => route('subscription.checkout', $plan),
+                'metadata' => [
+                    'user_id' => $user->id,
+                    'plan_id' => $plan->id,
                 ],
-                stripeSubscriptionId: $stripeSubscription->id ?? null,
-                description: "Bezahlter Plan '{$plan->name}' abonniert für {$finalPrice}€/Monat"
-            );
+                // Promo Codes direkt auf Stripe erlauben
+                // User kann Stripe Promotion Codes im Checkout eingeben
+                'allow_promotion_codes' => true,
+                // Rechnungsadresse abfragen
+                'billing_address_collection' => 'auto',
+                // Kundeninfos aktualisieren
+                'customer_update' => [
+                    'address' => 'auto',
+                    'name' => 'auto',
+                ],
+            ]);
 
-            return redirect()->route('subscription.success')
-                ->with('success', 'Subscription erfolgreich abgeschlossen!');
+            // Redirect zu Stripe Checkout
+            return redirect($checkoutSession->url);
+
         } catch (\Exception $e) {
-            \Log::error('Subscription error: ' . $e->getMessage());
-            return back()->with('error', 'Fehler beim Abschluss: ' . $e->getMessage());
+            \Log::error('Stripe Checkout Session error: ' . $e->getMessage());
+            return back()->with('error', 'Fehler beim Erstellen der Checkout-Session: ' . $e->getMessage());
         }
     }
 
@@ -310,6 +300,18 @@ class SubscriptionController extends Controller
     {
         $user = auth()->user();
 
+        // Zahlungsmethode abrufen (falls vorhanden)
+        $paymentMethod = null;
+        if ($user->hasDefaultPaymentMethod()) {
+            $pm = $user->defaultPaymentMethod();
+            $paymentMethod = [
+                'brand' => $pm->card->brand ?? 'card',
+                'last4' => $pm->card->last4 ?? '****',
+                'exp_month' => $pm->card->exp_month ?? null,
+                'exp_year' => $pm->card->exp_year ?? null,
+            ];
+        }
+
         return Inertia::render('Subscription/Manage', [
             // Cashier subscription (null wenn kostenloser Plan)
             'subscription' => $user->subscription('default'),
@@ -320,6 +322,9 @@ class SubscriptionController extends Controller
             // Rechnungen (nur bei Cashier subscriptions)
             'invoices' => $user->invoices(),
 
+            // Zahlungsmethode
+            'paymentMethod' => $paymentMethod,
+
             // Plattform-Nutzung
             'platformsConnected' => $user->connectedPlatforms()->count(),
             'maxPlatforms' => $user->plan->max_platforms ?? 1,
@@ -328,6 +333,25 @@ class SubscriptionController extends Controller
             'onTrial' => $user->onTrial(),
             'trialEndsAt' => $user->trial_ends_at,
         ]);
+    }
+
+    /**
+     * Redirect to Stripe Billing Portal.
+     *
+     * Das Stripe Billing Portal ermöglicht:
+     * - Zahlungsmethode ändern
+     * - Rechnungen einsehen
+     * - Subscription kündigen/ändern
+     */
+    public function billingPortal()
+    {
+        $user = auth()->user();
+
+        if (!$user->stripe_id) {
+            return back()->with('error', 'Kein Stripe-Konto vorhanden.');
+        }
+
+        return $user->redirectToBillingPortal(route('subscription.manage'));
     }
 
     /**

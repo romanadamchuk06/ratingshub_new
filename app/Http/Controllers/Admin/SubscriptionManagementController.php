@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Plan;
 use App\Models\User;
+use App\Models\SubscriptionActivityLog;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -12,20 +13,116 @@ class SubscriptionManagementController extends Controller
 {
     /**
      * Display all users with their subscriptions.
+     *
+     * Features:
+     * - Suche nach Name/Email
+     * - Filter nach Plan
+     * - Filter nach Status (aktiv, gekündigt, kein Abo)
+     * - Sortierung
+     * - Statistiken
      */
-    public function index()
+    public function index(Request $request)
     {
-        $users = User::with(['plan', 'subscriptions' => function ($query) {
-            $query->where('type', 'default')->latest();
-        }])
-            ->orderBy('created_at', 'desc')
-            ->paginate(20);
+        $query = User::with(['plan', 'subscriptions' => function ($q) {
+            $q->where('type', 'default')->latest();
+        }]);
 
-        $plans = Plan::where('is_active', true)->get();
+        // Suche
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter nach Plan
+        if ($request->filled('plan_id')) {
+            if ($request->plan_id === 'none') {
+                $query->whereNull('plan_id');
+            } else {
+                $query->where('plan_id', $request->plan_id);
+            }
+        }
+
+        // Filter nach Status
+        if ($request->filled('status')) {
+            switch ($request->status) {
+                case 'active':
+                    $query->whereHas('subscriptions', function ($q) {
+                        $q->where('type', 'default')
+                          ->whereNull('ends_at');
+                    });
+                    break;
+                case 'cancelled':
+                    $query->whereHas('subscriptions', function ($q) {
+                        $q->where('type', 'default')
+                          ->whereNotNull('ends_at');
+                    });
+                    break;
+                case 'free':
+                    $query->whereDoesntHave('subscriptions', function ($q) {
+                        $q->where('type', 'default');
+                    });
+                    break;
+            }
+        }
+
+        // Sortierung
+        $sortField = $request->get('sort', 'created_at');
+        $sortDir = $request->get('dir', 'desc');
+        $query->orderBy($sortField, $sortDir);
+
+        $users = $query->paginate(20)->withQueryString();
+
+        $plans = Plan::where('is_active', true)
+            ->orderBy('sort_order')
+            ->get();
+
+        // Statistiken berechnen
+        $stats = [
+            'totalUsers' => User::count(),
+            'activeSubscriptions' => User::whereHas('subscriptions', function ($q) {
+                $q->where('type', 'default')->whereNull('ends_at');
+            })->count(),
+            'cancelledSubscriptions' => User::whereHas('subscriptions', function ($q) {
+                $q->where('type', 'default')->whereNotNull('ends_at');
+            })->count(),
+            'freeUsers' => User::whereDoesntHave('subscriptions', function ($q) {
+                $q->where('type', 'default');
+            })->count(),
+            'monthlyRevenue' => Plan::join('users', 'plans.id', '=', 'users.plan_id')
+                ->whereHas('users.subscriptions', function ($q) {
+                    $q->where('type', 'default')->whereNull('ends_at');
+                })
+                ->where('plans.billing_interval', 'monthly')
+                ->sum('plans.price'),
+            'yearlyRevenue' => Plan::join('users', 'plans.id', '=', 'users.plan_id')
+                ->whereHas('users.subscriptions', function ($q) {
+                    $q->where('type', 'default')->whereNull('ends_at');
+                })
+                ->where('plans.billing_interval', 'yearly')
+                ->sum('plans.price'),
+        ];
+
+        // Letzte Aktivitäten
+        $recentActivity = SubscriptionActivityLog::with(['performedBy', 'targetUser', 'plan'])
+            ->latest()
+            ->take(5)
+            ->get();
 
         return Inertia::render('Admin/Subscriptions/Index', [
             'users' => $users,
             'plans' => $plans,
+            'stats' => $stats,
+            'recentActivity' => $recentActivity,
+            'filters' => [
+                'search' => $request->search,
+                'plan_id' => $request->plan_id,
+                'status' => $request->status,
+                'sort' => $sortField,
+                'dir' => $sortDir,
+            ],
         ]);
     }
 
@@ -39,6 +136,7 @@ class SubscriptionManagementController extends Controller
         ]);
 
         $plan = Plan::findOrFail($request->plan_id);
+        $oldPlan = $user->plan;
 
         try {
             // If switching to free plan
@@ -56,6 +154,19 @@ class SubscriptionManagementController extends Controller
 
             // Update user's plan
             $user->update(['plan_id' => $plan->id]);
+
+            // LOG: Admin hat Plan geändert
+            SubscriptionActivityLog::log(
+                performedBy: auth()->user(),
+                targetUser: $user,
+                plan: $plan,
+                action: 'admin_plan_changed',
+                changes: [
+                    'old_plan' => $oldPlan?->name,
+                    'new_plan' => $plan->name,
+                ],
+                description: "Admin hat Plan von '{$oldPlan?->name}' auf '{$plan->name}' geändert"
+            );
 
             return back()->with('success', "Plan für {$user->name} wurde auf {$plan->name} geändert.");
         } catch (\Exception $e) {

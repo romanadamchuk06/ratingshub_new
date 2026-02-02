@@ -2,7 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Plan;
+use App\Models\PromoCode;
 use App\Models\User;
+use App\Models\SubscriptionActivityLog;
+use App\Models\PromoCodeActivityLog;
 use App\Notifications\SubscriptionCancelled;
 use App\Notifications\PaymentFailed;
 use Illuminate\Http\Request;
@@ -198,6 +202,110 @@ class StripeWebhookController extends CashierController
 
         // Standard Cashier Handling
         return parent::handleInvoicePaymentSucceeded($payload);
+    }
+
+    /**
+     * Handle checkout.session.completed
+     *
+     * WICHTIG: Dieser Handler wird aufgerufen wenn ein User erfolgreich
+     * durch Stripe Checkout bezahlt hat.
+     *
+     * Flow:
+     * 1. User kommt von Checkout-Seite
+     * 2. Stripe Checkout Session erstellt
+     * 3. User zahlt auf Stripe-Seite
+     * 4. Stripe sendet checkout.session.completed Webhook
+     * 5. Wir erstellen die Subscription in unserer DB
+     */
+    public function handleCheckoutSessionCompleted(array $payload)
+    {
+        $session = $payload['data']['object'];
+
+        \Log::info('Stripe Webhook: Checkout Session Completed', [
+            'session_id' => $session['id'],
+            'customer_id' => $session['customer'],
+            'subscription_id' => $session['subscription'] ?? null,
+            'metadata' => $session['metadata'] ?? [],
+        ]);
+
+        // Metadata aus der Session holen
+        $metadata = $session['metadata'] ?? [];
+        $userId = $metadata['user_id'] ?? null;
+        $planId = $metadata['plan_id'] ?? null;
+        $promoCodeStr = $metadata['promo_code'] ?? null;
+
+        if (!$userId || !$planId) {
+            \Log::warning('Checkout Session ohne User/Plan Metadata', [
+                'session_id' => $session['id'],
+            ]);
+            return response('OK', 200);
+        }
+
+        $user = User::find($userId);
+        $plan = Plan::find($planId);
+
+        if (!$user || !$plan) {
+            \Log::error('User oder Plan nicht gefunden', [
+                'user_id' => $userId,
+                'plan_id' => $planId,
+            ]);
+            return response('OK', 200);
+        }
+
+        try {
+            // Plan-ID auf User setzen
+            $user->update(['plan_id' => $plan->id]);
+
+            // Promo Code als verwendet markieren (falls vorhanden)
+            if ($promoCodeStr) {
+                $promoCode = PromoCode::where('code', strtoupper($promoCodeStr))->first();
+                if ($promoCode) {
+                    $promoCode->markAsUsed($user);
+
+                    PromoCodeActivityLog::log(
+                        performedBy: $user,
+                        promoCode: $promoCode,
+                        action: 'used',
+                        usedBy: $user,
+                        changes: [
+                            'plan' => $plan->name,
+                            'checkout_session' => $session['id'],
+                        ],
+                        description: "Promo-Code '{$promoCode->code}' verwendet via Stripe Checkout"
+                    );
+                }
+            }
+
+            // Subscription Activity Log
+            SubscriptionActivityLog::log(
+                performedBy: $user,
+                targetUser: $user,
+                plan: $plan,
+                action: 'subscribed',
+                changes: [
+                    'plan' => $plan->name,
+                    'type' => 'stripe_checkout',
+                    'promo_code' => $promoCodeStr,
+                    'checkout_session_id' => $session['id'],
+                ],
+                stripeSubscriptionId: $session['subscription'] ?? null,
+                description: "Plan '{$plan->name}' via Stripe Checkout abonniert"
+            );
+
+            \Log::info('Subscription erfolgreich erstellt via Checkout', [
+                'user_id' => $user->id,
+                'plan_id' => $plan->id,
+                'subscription_id' => $session['subscription'] ?? null,
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Fehler bei Checkout Session Verarbeitung', [
+                'error' => $e->getMessage(),
+                'session_id' => $session['id'],
+            ]);
+        }
+
+        return response('OK', 200);
     }
 
     /**

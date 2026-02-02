@@ -1,22 +1,19 @@
 <script setup>
 /**
- * SUBSCRIPTION MANAGE PAGE - HYBRID-SYSTEM
- * ==========================================
+ * SUBSCRIPTION MANAGE PAGE
+ * ========================
  *
- * Diese Seite funktioniert mit ZWEI verschiedenen Subscription-Typen:
+ * Verwaltungsseite für Subscriptions mit Stripe Integration.
  *
- * 1. KOSTENLOSE PLÄNE (Free, 100% Promo):
- *    - props.subscription = null (keine Cashier subscription in DB)
- *    - props.currentPlan = Plan-Objekt (über user.plan_id)
- *    - Zeigt nur: Plan-Details, "Plan ändern" Button
- *    - KEIN Cancel/Resume, keine Zahlungsmethode, keine Rechnungen
+ * Features:
+ * - Aktueller Plan mit Abrechnungsintervall (monatlich/jährlich)
+ * - Link zum Stripe Billing Portal (Zahlungsmethode ändern)
+ * - Rechnungen herunterladen
+ * - Subscription kündigen/reaktivieren
  *
- * 2. BEZAHLTE PLÄNE (mit Stripe-Billing):
- *    - props.subscription = Cashier subscription Objekt
- *    - props.currentPlan = Plan-Objekt
- *    - Zeigt alles: Plan-Details, Cancel/Resume, Zahlungsmethode, Rechnungen
- *
- * Die Komponente prüft, ob subscription existiert, und zeigt Features entsprechend.
+ * ZWEI SUBSCRIPTION-TYPEN:
+ * 1. Kostenlose Pläne: subscription = null, nur currentPlan vorhanden
+ * 2. Bezahlte Pläne: subscription + currentPlan + paymentMethod vorhanden
  */
 
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -32,25 +29,27 @@ import {
     CheckCircle,
     XCircle,
     Globe,
-    Clock
+    Clock,
+    ExternalLink
 } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 const props = defineProps({
-    // Cashier subscription (null bei kostenlosen Plänen)
     subscription: {
         type: Object,
         default: null,
     },
-    // Plan-Details (immer vorhanden über user.plan_id)
     currentPlan: {
         type: Object,
         required: true,
     },
-    // Rechnungen (nur bei Cashier subscriptions)
     invoices: {
         type: Array,
         default: () => [],
+    },
+    paymentMethod: {
+        type: Object,
+        default: null,
     },
     platformsConnected: {
         type: Number,
@@ -72,8 +71,26 @@ const props = defineProps({
 
 const loading = ref(false);
 
+// Ist der Plan jährlich?
+const isYearly = computed(() => props.currentPlan?.billing_interval === 'yearly');
+
+// Formatierter Preis mit Intervall
+const formattedPrice = computed(() => {
+    const price = Number(props.currentPlan?.price || 0);
+    if (price === 0) return 'Kostenlos';
+    const interval = isYearly.value ? '/Jahr' : '/Monat';
+    return `${price.toFixed(2).replace('.', ',')} €${interval}`;
+});
+
+// Monatlicher Äquivalent bei jährlicher Zahlung
+const monthlyEquivalent = computed(() => {
+    if (!isYearly.value) return null;
+    const yearly = Number(props.currentPlan?.price || 0);
+    return (yearly / 12).toFixed(2).replace('.', ',');
+});
+
 const cancelSubscription = () => {
-    if (!confirm('Möchtest du deine Subscription wirklich kündigen?')) return;
+    if (!confirm('Möchtest du deine Subscription wirklich kündigen? Du kannst den Service bis zum Ende der Laufzeit weiter nutzen.')) return;
 
     loading.value = true;
     router.post('/subscription/cancel', {}, {
@@ -97,30 +114,32 @@ const formatDate = (dateString) => {
     });
 };
 
+// Kreditkarten-Marke formatieren
+const formatCardBrand = (brand) => {
+    const brands = {
+        'visa': 'Visa',
+        'mastercard': 'Mastercard',
+        'amex': 'American Express',
+        'discover': 'Discover',
+        'diners': 'Diners Club',
+        'jcb': 'JCB',
+        'unionpay': 'UnionPay',
+    };
+    return brands[brand?.toLowerCase()] || brand || 'Karte';
+};
+
 /**
- * Berechnet den Subscription-Status Badge
- *
- * WICHTIG: Prüft currentPlan, NICHT subscription!
- * Warum? Weil kostenlose Pläne keine Cashier subscription haben,
- * aber trotzdem einen aktiven Plan (über plan_id).
- *
- * Logik:
- * 1. Kein Plan oder Free Plan → "Kein Abo" (grau)
- * 2. Hat Plan + subscription.ends_at → "Gekündigt" (rot)
- * 3. Hat Plan → "Aktiv" (grün)
+ * Subscription-Status Badge
  */
 const getSubscriptionStatus = () => {
-    // Fall 1: Kein Plan oder Free Plan
-    if (!props.currentPlan || props.currentPlan.name === 'Free') {
-        return { text: 'Kein Abo', variant: 'secondary', icon: XCircle };
+    if (!props.currentPlan || props.currentPlan.price == 0) {
+        return { text: 'Free Plan', variant: 'secondary', icon: CheckCircle };
     }
 
-    // Fall 2: Plan vorhanden, aber Cashier subscription wurde gekündigt
     if (props.subscription && props.subscription.ends_at) {
         return { text: 'Gekündigt', variant: 'destructive', icon: AlertCircle };
     }
 
-    // Fall 3: Aktiver Plan (egal ob mit oder ohne Cashier subscription)
     return { text: 'Aktiv', variant: 'default', icon: CheckCircle };
 };
 
@@ -160,11 +179,21 @@ const status = getSubscriptionStatus();
                         <!-- Plan Details -->
                         <div class="flex items-center justify-between">
                             <span class="text-sm text-muted-foreground">Plan</span>
-                            <span class="font-semibold">{{ currentPlan.name }}</span>
+                            <div class="text-right">
+                                <span class="font-semibold">{{ currentPlan.name }}</span>
+                                <Badge v-if="isYearly" variant="secondary" class="ml-2 text-xs">
+                                    Jährlich
+                                </Badge>
+                            </div>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-sm text-muted-foreground">Preis</span>
-                            <span class="font-semibold">{{ Number(currentPlan.price).toFixed(2).replace('.', ',') }} € / Monat</span>
+                            <div class="text-right">
+                                <span class="font-semibold">{{ formattedPrice }}</span>
+                                <p v-if="monthlyEquivalent" class="text-xs text-muted-foreground">
+                                    ({{ monthlyEquivalent }} €/Monat)
+                                </p>
+                            </div>
                         </div>
 
                         <!-- Zahlungsdetails: Nur bei Cashier subscriptions -->
@@ -186,16 +215,13 @@ const status = getSubscriptionStatus();
                         </div>
 
                         <!-- Actions -->
-                        <div class="flex gap-3 border-t pt-4">
-                            <!-- "Plan ändern" immer verfügbar -->
+                        <div class="flex flex-wrap gap-3 border-t pt-4">
                             <Link href="/subscription" class="flex-1">
                                 <Button variant="outline" class="w-full">
                                     Plan ändern
                                 </Button>
                             </Link>
 
-                            <!-- Cancel/Resume Buttons: NUR bei Cashier subscriptions -->
-                            <!-- Grund: Kostenlose Pläne haben keine subscription zum kündigen -->
                             <Button
                                 v-if="subscription && !subscription.ends_at"
                                 variant="destructive"
@@ -233,21 +259,21 @@ const status = getSubscriptionStatus();
                                 <div>
                                     <p class="font-medium">Verbundene Plattformen</p>
                                     <p class="text-sm text-muted-foreground">
-                                        {{ platformsConnected }} von {{ maxPlatforms }} genutzt
+                                        {{ platformsConnected }} von {{ maxPlatforms === 1000 ? '∞' : maxPlatforms }} genutzt
                                     </p>
                                 </div>
                             </div>
                             <div class="text-right">
-                                <p class="text-2xl font-bold">{{ platformsConnected }}/{{ maxPlatforms }}</p>
+                                <p class="text-2xl font-bold">{{ platformsConnected }}/{{ maxPlatforms === 1000 ? '∞' : maxPlatforms }}</p>
                             </div>
                         </div>
 
                         <!-- Trial Info -->
-                        <div v-if="onTrial" class="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
-                            <Clock class="h-5 w-5 text-blue-600" />
+                        <div v-if="onTrial" class="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                            <Clock class="h-5 w-5 text-blue-600 dark:text-blue-400" />
                             <div>
-                                <p class="font-medium text-blue-900">Testphase aktiv</p>
-                                <p class="text-sm text-blue-700">
+                                <p class="font-medium text-blue-900 dark:text-blue-100">Testphase aktiv</p>
+                                <p class="text-sm text-blue-700 dark:text-blue-300">
                                     Endet am {{ formatDate(trialEndsAt) }}
                                 </p>
                             </div>
@@ -271,11 +297,10 @@ const status = getSubscriptionStatus();
                 </Card>
 
                 <!-- Payment Method Card -->
-                <!-- Nur bei Cashier subscriptions: Kostenlose Pläne haben keine Zahlungsmethode -->
                 <Card v-if="subscription">
                     <CardHeader>
                         <CardTitle>Zahlungsmethode</CardTitle>
-                        <CardDescription>Verwalte deine Zahlungsinformationen</CardDescription>
+                        <CardDescription>Verwalte deine Zahlungsinformationen über Stripe</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div class="flex items-center gap-3">
@@ -283,34 +308,56 @@ const status = getSubscriptionStatus();
                                 <CreditCard class="h-5 w-5" />
                             </div>
                             <div class="flex-1">
-                                <p class="font-medium">•••• •••• •••• 4242</p>
-                                <p class="text-sm text-muted-foreground">Läuft ab 12/2025</p>
+                                <p v-if="paymentMethod" class="font-medium">
+                                    {{ formatCardBrand(paymentMethod.brand) }} •••• {{ paymentMethod.last4 }}
+                                </p>
+                                <p v-else class="font-medium text-muted-foreground">
+                                    Keine Zahlungsmethode hinterlegt
+                                </p>
+                                <p v-if="paymentMethod?.exp_month && paymentMethod?.exp_year" class="text-sm text-muted-foreground">
+                                    Läuft ab {{ paymentMethod.exp_month }}/{{ paymentMethod.exp_year }}
+                                </p>
                             </div>
-                            <Button variant="outline" size="sm">
-                                Aktualisieren
-                            </Button>
+                            <Link href="/subscription/billing-portal">
+                                <Button variant="outline" size="sm">
+                                    <ExternalLink class="mr-2 h-4 w-4" />
+                                    Verwalten
+                                </Button>
+                            </Link>
                         </div>
+                        <p class="mt-3 text-xs text-muted-foreground">
+                            Du wirst zum Stripe Kundenportal weitergeleitet, um deine Zahlungsmethode sicher zu ändern.
+                        </p>
                     </CardContent>
                 </Card>
 
                 <!-- Invoices Card -->
-                <!-- Nur bei Cashier subscriptions: Kostenlose Pläne haben keine Rechnungen -->
                 <Card v-if="invoices.length > 0">
                     <CardHeader>
-                        <CardTitle>Rechnungen</CardTitle>
-                        <CardDescription>Lade deine bisherigen Rechnungen herunter</CardDescription>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <CardTitle>Rechnungen</CardTitle>
+                                <CardDescription>Lade deine bisherigen Rechnungen herunter</CardDescription>
+                            </div>
+                            <Link href="/subscription/billing-portal">
+                                <Button variant="outline" size="sm">
+                                    <ExternalLink class="mr-2 h-4 w-4" />
+                                    Alle Rechnungen
+                                </Button>
+                            </Link>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <div class="space-y-3">
                             <div
-                                v-for="invoice in invoices"
+                                v-for="invoice in invoices.slice(0, 5)"
                                 :key="invoice.id"
                                 class="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0"
                             >
                                 <div>
                                     <p class="font-medium">{{ formatDate(invoice.date) }}</p>
                                     <p class="text-sm text-muted-foreground">
-                                        {{ (invoice.total / 100).toFixed(2) }} €
+                                        {{ (invoice.total / 100).toFixed(2).replace('.', ',') }} €
                                     </p>
                                 </div>
                                 <Link :href="`/subscription/invoice/${invoice.id}`">
@@ -322,6 +369,26 @@ const status = getSubscriptionStatus();
                         </div>
                     </CardContent>
                 </Card>
+
+                <!-- Stripe Portal Hint für bezahlte Pläne -->
+                <div v-if="subscription" class="rounded-lg border bg-muted/30 p-4">
+                    <div class="flex items-start gap-3">
+                        <ExternalLink class="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                            <p class="font-medium">Stripe Kundenportal</p>
+                            <p class="text-sm text-muted-foreground mb-3">
+                                Im Stripe Kundenportal kannst du alle Abrechnungsdetails verwalten:
+                                Zahlungsmethode ändern, Rechnungen einsehen, Subscription kündigen.
+                            </p>
+                            <Link href="/subscription/billing-portal">
+                                <Button variant="outline" size="sm">
+                                    <ExternalLink class="mr-2 h-4 w-4" />
+                                    Zum Kundenportal
+                                </Button>
+                            </Link>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </AppLayout>
