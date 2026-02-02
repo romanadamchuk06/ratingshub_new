@@ -64,6 +64,7 @@ class PlanController extends Controller
             'slug' => 'required|string|max:255|unique:plans,slug|regex:/^[a-z0-9-]+$/',
             'stripe_plan_id' => 'nullable|string|max:255',
             'price' => 'required|numeric|min:0|max:9999.99',
+            'billing_interval' => 'required|in:monthly,yearly', // Abrechnungsintervall
             'max_platforms' => 'required|integer|min:1|max:1000',
             'description' => 'nullable|string',
             'features' => 'nullable|array',
@@ -136,6 +137,7 @@ class PlanController extends Controller
             'slug' => 'required|string|max:255|regex:/^[a-z0-9-]+$/|unique:plans,slug,' . $plan->id,
             'stripe_plan_id' => 'nullable|string|max:255',
             'price' => 'required|numeric|min:0|max:9999.99',
+            'billing_interval' => 'required|in:monthly,yearly', // Abrechnungsintervall
             'max_platforms' => 'required|integer|min:1|max:1000',
             'description' => 'nullable|string',
             'features' => 'nullable|array',

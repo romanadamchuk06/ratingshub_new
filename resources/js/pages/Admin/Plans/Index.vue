@@ -86,15 +86,17 @@ const togglePopular = (plan) => {
 };
 
 /**
- * Formatiere Preis
+ * Formatiere Preis mit Abrechnungsintervall
  * 0 → "Kostenlos"
- * 9.99 → "9,99 € / Monat"
+ * 9.99 monthly → "9,99 € / Monat"
+ * 119.88 yearly → "119,88 € / Jahr"
  */
-const formatPrice = (price) => {
+const formatPrice = (price, billingInterval) => {
     if (parseFloat(price) === 0) {
         return 'Kostenlos';
     }
-    return `${parseFloat(price).toFixed(2).replace('.', ',')} € / Monat`;
+    const interval = billingInterval === 'yearly' ? 'Jahr' : 'Monat';
+    return `${parseFloat(price).toFixed(2).replace('.', ',')} € / ${interval}`;
 };
 
 /**
@@ -161,9 +163,9 @@ const getStatusBadge = (isActive) => {
                                 </code>
                             </TableCell>
 
-                            <!-- Preis -->
+                            <!-- Preis mit Intervall -->
                             <TableCell>
-                                {{ formatPrice(plan.price) }}
+                                {{ formatPrice(plan.price, plan.billing_interval) }}
                             </TableCell>
 
                             <!-- Max Plattformen -->

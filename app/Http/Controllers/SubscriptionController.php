@@ -28,6 +28,9 @@ class SubscriptionController extends Controller
 
     /**
      * Show checkout page for a plan.
+     *
+     * Lädt auch den Schwester-Plan (gleicher Name, anderes Intervall)
+     * damit User im Checkout zwischen monatlich/jährlich wechseln können.
      */
     public function checkout(Plan $plan)
     {
@@ -46,8 +49,16 @@ class SubscriptionController extends Controller
                 ->with('success', 'Du nutzt jetzt den Free Plan.');
         }
 
+        // Finde den Schwester-Plan (gleicher Name, anderes Intervall)
+        $siblingInterval = $plan->billing_interval === 'monthly' ? 'yearly' : 'monthly';
+        $siblingPlan = Plan::where('name', $plan->name)
+            ->where('billing_interval', $siblingInterval)
+            ->where('is_active', true)
+            ->first();
+
         return Inertia::render('Subscription/Checkout', [
             'plan' => $plan,
+            'siblingPlan' => $siblingPlan, // Kann null sein wenn kein Schwester-Plan existiert
             'intent' => $user->createSetupIntent(),
         ]);
     }

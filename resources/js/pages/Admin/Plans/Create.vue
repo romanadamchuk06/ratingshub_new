@@ -39,6 +39,7 @@ const form = useForm({
     slug: '',
     stripe_plan_id: '',
     price: '0.00',
+    billing_interval: 'monthly', // 'monthly' oder 'yearly'
     max_platforms: 1,
     description: '',
     features: [''],
@@ -168,6 +169,37 @@ const submit = () => {
                             </p>
                             <p v-if="form.errors.price" class="text-sm text-destructive">
                                 {{ form.errors.price }}
+                            </p>
+                        </div>
+
+                        <!-- Abrechnungsintervall -->
+                        <div class="space-y-2">
+                            <Label for="billing_interval">Abrechnungsintervall *</Label>
+                            <div class="flex gap-4">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        v-model="form.billing_interval"
+                                        value="monthly"
+                                        class="h-4 w-4"
+                                    />
+                                    <span>Monatlich</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        v-model="form.billing_interval"
+                                        value="yearly"
+                                        class="h-4 w-4"
+                                    />
+                                    <span>Jährlich</span>
+                                </label>
+                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                Für jährliche Abrechnung: Preis = Jahrespreis (z.B. 119.88€/Jahr)
+                            </p>
+                            <p v-if="form.errors.billing_interval" class="text-sm text-destructive">
+                                {{ form.errors.billing_interval }}
                             </p>
                         </div>
 
