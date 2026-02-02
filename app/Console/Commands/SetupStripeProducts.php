@@ -6,97 +6,136 @@ use App\Models\Plan;
 use Illuminate\Console\Command;
 use Stripe\StripeClient;
 
+/**
+ * STRIPE PRODUCTS SETUP
+ *
+ * Erstellt Stripe Products und Prices für alle Subscription-Pläne.
+ *
+ * WICHTIG:
+ * - Jeder Plan braucht eine Stripe Price ID
+ * - Monatliche Pläne: interval = 'month'
+ * - Jährliche Pläne: interval = 'year'
+ *
+ * USAGE:
+ * php artisan stripe:setup-products
+ */
 class SetupStripeProducts extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
     protected $signature = 'stripe:setup-products';
-
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
     protected $description = 'Create Stripe products and prices for subscription plans';
 
-    /**
-     * Execute the console command.
-     */
     public function handle()
     {
         $this->info('Setting up Stripe products and prices...');
+        $this->newLine();
 
-        $stripe = new StripeClient(config('cashier.secret'));
-
-        // Get all paid plans (price > 0)
-        $plans = Plan::where('price', '>', 0)->get();
-
-        if ($plans->isEmpty()) {
-            $this->warn('No paid plans found in database.');
+        // Prüfe ob Stripe konfiguriert ist
+        $stripeSecret = config('cashier.secret');
+        if (!$stripeSecret || str_starts_with($stripeSecret, 'sk_test_51SPk')) {
+            $this->error('Bitte STRIPE_SECRET in .env konfigurieren!');
             return Command::FAILURE;
         }
 
-        foreach ($plans as $plan) {
-            $this->info("Processing plan: {$plan->name}");
+        $stripe = new StripeClient($stripeSecret);
 
-            try {
-                // Create Stripe Product
-                $product = $stripe->products->create([
-                    'name' => $plan->name,
-                    'description' => $plan->description,
-                    'metadata' => [
-                        'plan_id' => $plan->id,
-                        'max_platforms' => $plan->max_platforms,
-                    ],
-                ]);
+        // Hole alle bezahlten Pläne (price > 0) die noch keine Stripe ID haben
+        $plans = Plan::where('price', '>', 0)
+            ->whereNull('stripe_plan_id')
+            ->where('is_active', true)
+            ->get();
 
-                $this->info("  ✓ Product created: {$product->id}");
-
-                // Create Stripe Price (recurring monthly)
-                $price = $stripe->prices->create([
-                    'product' => $product->id,
-                    'unit_amount' => (int) ($plan->price * 100), // Convert to cents
-                    'currency' => config('cashier.currency', 'eur'),
-                    'recurring' => [
-                        'interval' => 'month',
-                    ],
-                    'metadata' => [
-                        'plan_id' => $plan->id,
-                    ],
-                ]);
-
-                $this->info("  ✓ Price created: {$price->id}");
-
-                // Update plan with Stripe price ID
-                $plan->update([
-                    'stripe_plan_id' => $price->id,
-                ]);
-
-                $this->info("  ✓ Plan updated in database with price ID: {$price->id}");
-                $this->newLine();
-
-            } catch (\Exception $e) {
-                $this->error("  ✗ Error processing plan {$plan->name}: {$e->getMessage()}");
-                $this->newLine();
-                continue;
-            }
+        if ($plans->isEmpty()) {
+            $this->info('Keine Pläne ohne Stripe ID gefunden.');
+            $this->newLine();
+            $this->showExistingPlans();
+            return Command::SUCCESS;
         }
 
-        $this->info('✓ Stripe products and prices setup completed!');
+        $this->info("Gefunden: {$plans->count()} Pläne ohne Stripe ID");
         $this->newLine();
 
-        $this->table(
-            ['Plan', 'Price', 'Stripe Price ID'],
-            $plans->map(fn($plan) => [
-                $plan->name,
-                number_format($plan->price, 2) . ' €',
-                $plan->stripe_plan_id ?? 'Not set',
-            ])
-        );
+        foreach ($plans as $plan) {
+            $this->processPlan($stripe, $plan);
+        }
+
+        $this->newLine();
+        $this->info('✓ Stripe Setup abgeschlossen!');
+        $this->newLine();
+        $this->showExistingPlans();
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Erstellt Stripe Product und Price für einen Plan
+     */
+    private function processPlan(StripeClient $stripe, Plan $plan): void
+    {
+        $interval = $plan->billing_interval === 'yearly' ? 'year' : 'month';
+        $intervalLabel = $plan->billing_interval === 'yearly' ? 'Jährlich' : 'Monatlich';
+
+        $this->info("→ {$plan->name} ({$intervalLabel}, {$plan->price}€)");
+
+        try {
+            // 1. Stripe Product erstellen
+            $product = $stripe->products->create([
+                'name' => "{$plan->name} ({$intervalLabel})",
+                'description' => $plan->description ?? "RatingsHub {$plan->name} Plan",
+                'metadata' => [
+                    'plan_id' => $plan->id,
+                    'billing_interval' => $plan->billing_interval,
+                    'max_platforms' => $plan->max_platforms,
+                ],
+            ]);
+
+            $this->line("  ✓ Product: {$product->id}");
+
+            // 2. Stripe Price erstellen (recurring)
+            $price = $stripe->prices->create([
+                'product' => $product->id,
+                'unit_amount' => (int) ($plan->price * 100), // Cents
+                'currency' => config('cashier.currency', 'eur'),
+                'recurring' => [
+                    'interval' => $interval, // 'month' oder 'year'
+                ],
+                'metadata' => [
+                    'plan_id' => $plan->id,
+                ],
+            ]);
+
+            $this->line("  ✓ Price: {$price->id}");
+
+            // 3. Plan mit Stripe Price ID updaten
+            $plan->update(['stripe_plan_id' => $price->id]);
+
+            $this->line("  ✓ Plan updated");
+            $this->newLine();
+
+        } catch (\Exception $e) {
+            $this->error("  ✗ Fehler: {$e->getMessage()}");
+            $this->newLine();
+        }
+    }
+
+    /**
+     * Zeigt alle Pläne mit Stripe IDs
+     */
+    private function showExistingPlans(): void
+    {
+        $plans = Plan::where('is_active', true)
+            ->orderBy('billing_interval')
+            ->orderBy('price')
+            ->get();
+
+        $this->table(
+            ['ID', 'Name', 'Preis', 'Interval', 'Stripe Price ID'],
+            $plans->map(fn($p) => [
+                $p->id,
+                $p->name,
+                number_format($p->price, 2) . ' €',
+                $p->billing_interval,
+                $p->stripe_plan_id ?? '❌ Fehlt',
+            ])
+        );
     }
 }
