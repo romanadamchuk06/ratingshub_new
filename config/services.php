@@ -47,4 +47,13 @@ return [
         'api_key' => env('OPENAI_API_KEY'),
     ],
 
+    // Stripe Pricing Tables (Light + Dark Mode)
+    // Erstelle zwei Pricing Tables im Stripe Dashboard: Produkte → Pricing Tables
+    // Light: Hintergrund #ffffff, Button #171717
+    // Dark: Hintergrund #0A0A0A, Button #FAFAFA
+    'stripe' => [
+        'pricing_table_id' => env('STRIPE_PRICING_TABLE_ID'),
+        'pricing_table_id_dark' => env('STRIPE_PRICING_TABLE_ID_DARK'),
+    ],
+
 ];

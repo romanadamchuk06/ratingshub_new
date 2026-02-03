@@ -10,14 +10,76 @@ use Inertia\Inertia;
 
 class PromoCodeController extends Controller
 {
-    public function index()
+    /**
+     * Display all promo codes with search, filters and statistics.
+     *
+     * Features:
+     * - Suche nach Code oder Beschreibung
+     * - Filter nach Status (aktiv/inaktiv)
+     * - Filter nach Typ (prozentual/fix)
+     * - Statistiken (Gesamt, Aktiv, Verwendungen, Ersparnis)
+     */
+    public function index(Request $request)
     {
-        $promoCodes = PromoCode::withCount('usages')
-            ->orderBy('created_at', 'desc')
-            ->paginate(20);
+        $query = PromoCode::withCount('usages');
+
+        // Suche nach Code oder Beschreibung
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('code', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter nach Status
+        if ($request->filled('status')) {
+            if ($request->status === 'active') {
+                $query->where('is_active', true);
+            } elseif ($request->status === 'inactive') {
+                $query->where('is_active', false);
+            } elseif ($request->status === 'expired') {
+                $query->where('expires_at', '<', now());
+            }
+        }
+
+        // Filter nach Typ
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+
+        // Sortierung
+        $sortField = $request->get('sort', 'created_at');
+        $sortDir = $request->get('dir', 'desc');
+        $query->orderBy($sortField, $sortDir);
+
+        $promoCodes = $query->paginate(20)->withQueryString();
+
+        // Statistiken berechnen
+        $stats = [
+            'totalCodes' => PromoCode::count(),
+            'activeCodes' => PromoCode::where('is_active', true)->count(),
+            'totalUsages' => PromoCode::withCount('usages')->get()->sum('usages_count'),
+            'expiredCodes' => PromoCode::where('expires_at', '<', now())->count(),
+        ];
+
+        // Letzte Aktivitäten
+        $recentActivity = PromoCodeActivityLog::with(['performedBy', 'promoCode', 'usedBy'])
+            ->latest()
+            ->take(5)
+            ->get();
 
         return Inertia::render('Admin/PromoCodes/Index', [
             'promoCodes' => $promoCodes,
+            'stats' => $stats,
+            'recentActivity' => $recentActivity,
+            'filters' => [
+                'search' => $request->search,
+                'status' => $request->status,
+                'type' => $request->type,
+                'sort' => $sortField,
+                'dir' => $sortDir,
+            ],
         ]);
     }
 

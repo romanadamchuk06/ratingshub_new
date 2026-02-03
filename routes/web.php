@@ -246,7 +246,6 @@ Route::middleware(['auth', 'verified'])->prefix('subscription')->name('subscript
     Route::get('/', [App\Http\Controllers\SubscriptionController::class, 'index'])->name('index');
     Route::get('/checkout/{plan}', [App\Http\Controllers\SubscriptionController::class, 'checkout'])->name('checkout');
     Route::post('/subscribe/{plan}', [App\Http\Controllers\SubscriptionController::class, 'subscribe'])->name('subscribe');
-    Route::post('/validate-promo-code', [App\Http\Controllers\SubscriptionController::class, 'validatePromoCode'])->name('validate-promo-code');
     Route::get('/success', [App\Http\Controllers\SubscriptionController::class, 'success'])->name('success');
     Route::get('/manage', [App\Http\Controllers\SubscriptionController::class, 'manage'])->name('manage');
     Route::post('/cancel', [App\Http\Controllers\SubscriptionController::class, 'cancel'])->name('cancel');
@@ -276,12 +275,6 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
                 // Aktive Subscriptions (User mit plan_id)
                 'activeSubscriptions' => \App\Models\User::whereNotNull('plan_id')->count(),
 
-                // Aktive Promo Codes (is_active = true)
-                'activePromoCodes' => \App\Models\PromoCode::where('is_active', true)->count(),
-
-                // Gesamt Subscription-Pläne (aktiv + inaktiv)
-                'totalPlans' => \App\Models\Plan::count(),
-
                 // Administratoren (is_admin = true)
                 'totalAdmins' => \App\Models\User::where('is_admin', true)->count(),
             ],
@@ -298,22 +291,6 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('subscriptions/{user}/cancel', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'cancelSubscription'])->name('subscriptions.cancel');
     Route::post('subscriptions/{user}/cancel-now', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'cancelSubscriptionNow'])->name('subscriptions.cancel-now');
     Route::post('subscriptions/{user}/resume', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'resumeSubscription'])->name('subscriptions.resume');
-
-    // Promo Code Management
-    Route::get('promo-codes', [\App\Http\Controllers\Admin\PromoCodeController::class, 'index'])->name('promo-codes.index');
-    Route::post('promo-codes', [\App\Http\Controllers\Admin\PromoCodeController::class, 'store'])->name('promo-codes.store');
-    Route::patch('promo-codes/{promoCode}', [\App\Http\Controllers\Admin\PromoCodeController::class, 'update'])->name('promo-codes.update');
-    Route::delete('promo-codes/{promoCode}', [\App\Http\Controllers\Admin\PromoCodeController::class, 'destroy'])->name('promo-codes.destroy');
-
-    // Plan Management
-    Route::get('plans', [\App\Http\Controllers\Admin\PlanController::class, 'index'])->name('plans.index');
-    Route::get('plans/create', [\App\Http\Controllers\Admin\PlanController::class, 'create'])->name('plans.create');
-    Route::post('plans', [\App\Http\Controllers\Admin\PlanController::class, 'store'])->name('plans.store');
-    Route::get('plans/{plan}/edit', [\App\Http\Controllers\Admin\PlanController::class, 'edit'])->name('plans.edit');
-    Route::patch('plans/{plan}', [\App\Http\Controllers\Admin\PlanController::class, 'update'])->name('plans.update');
-    Route::post('plans/{plan}/toggle-active', [\App\Http\Controllers\Admin\PlanController::class, 'toggleActive'])->name('plans.toggle-active');
-    Route::post('plans/{plan}/toggle-popular', [\App\Http\Controllers\Admin\PlanController::class, 'togglePopular'])->name('plans.toggle-popular');
-    Route::delete('plans/{plan}', [\App\Http\Controllers\Admin\PlanController::class, 'destroy'])->name('plans.destroy');
 
     // Activity Logs (READ-ONLY - keine Edit/Delete!)
     Route::get('activity-logs', [\App\Http\Controllers\Admin\ActivityLogController::class, 'index'])->name('activity-logs.index');

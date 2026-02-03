@@ -5,11 +5,18 @@
  *
  * Formular zum Erstellen neuer Subscription-Pläne
  *
+ * WICHTIG FÜR STRIPE INTEGRATION:
+ * - Jeder Plan braucht eine Stripe Price ID (price_xxxxx)
+ * - Die Price ID muss ZUERST im Stripe Dashboard erstellt werden
+ * - Das Abrechnungsintervall hier MUSS mit dem in Stripe übereinstimmen
+ * - Für monatliche UND jährliche Optionen: 2 separate Pläne erstellen
+ *
  * Felder:
  * - Name (z.B. "Premium")
  * - Slug (z.B. "premium", für URLs)
- * - Stripe Plan ID (Price ID von Stripe)
- * - Preis (in Euro)
+ * - Stripe Price ID (Price ID von Stripe Dashboard)
+ * - Preis (in Euro - MUSS mit Stripe übereinstimmen!)
+ * - Abrechnungsintervall (monthly/yearly - MUSS mit Stripe übereinstimmen!)
  * - Max Plattformen (1-1000, 1000 = Unbegrenzt)
  * - Beschreibung
  * - Features (Array von Strings)
@@ -23,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import {
     Card,
     CardContent,
@@ -30,8 +38,13 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { ArrowLeft, Plus, X } from 'lucide-vue-next';
-import { ref } from 'vue';
+import {
+    Alert,
+    AlertDescription,
+    AlertTitle,
+} from '@/components/ui/alert';
+import { ArrowLeft, Plus, X, ExternalLink, AlertCircle } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 // Form State mit Inertia Form Helper
 const form = useForm({
@@ -39,13 +52,17 @@ const form = useForm({
     slug: '',
     stripe_plan_id: '',
     price: '0.00',
-    billing_interval: 'monthly', // 'monthly' oder 'yearly'
     max_platforms: 1,
     description: '',
     features: [''],
     is_active: true,
-    is_popular: false, // Zeigt "Beliebt"-Badge auf Pricing-Seite
+    is_popular: false,
     sort_order: 10,
+});
+
+// Prüft ob Plan bezahlt ist (benötigt Stripe Price ID)
+const isPaidPlan = computed(() => {
+    return parseFloat(form.price) > 0;
 });
 
 /**
@@ -92,7 +109,11 @@ const submit = () => {
 <template>
     <Head title="Plan erstellen" />
 
-    <AppLayout>
+    <AppLayout :breadcrumbs="[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Pläne', href: '/admin/plans' },
+        { label: 'Erstellen', href: '/admin/plans/create' }
+    ]">
         <div class="space-y-6 p-4 md:p-6 lg:p-8">
             <!-- Header -->
             <div class="flex items-center gap-4">
@@ -110,12 +131,87 @@ const submit = () => {
             </div>
 
             <form @submit.prevent="submit" class="mx-auto max-w-2xl space-y-6">
+                <!-- Stripe Info Alert -->
+                <Alert>
+                    <AlertCircle class="h-4 w-4" />
+                    <AlertTitle>Stripe Integration</AlertTitle>
+                    <AlertDescription class="mt-2">
+                        <p>
+                            Für bezahlte Pläne musst du <strong>zuerst</strong> ein Produkt mit Preisen im
+                            <a
+                                href="https://dashboard.stripe.com/products"
+                                target="_blank"
+                                class="inline-flex items-center gap-1 font-medium underline"
+                            >
+                                Stripe Dashboard
+                                <ExternalLink class="h-3 w-3" />
+                            </a>
+                            erstellen. Die Zahlungsintervall-Auswahl (monatlich/jährlich) erfolgt direkt im Stripe Checkout.
+                        </p>
+                    </AlertDescription>
+                </Alert>
+
+                <!-- Stripe Integration -->
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Stripe Konfiguration</CardTitle>
+                        <CardDescription>
+                            Diese Werte MÜSSEN mit deinem Stripe-Preis übereinstimmen
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent class="space-y-4">
+                        <!-- Stripe Price ID -->
+                        <div class="space-y-2">
+                            <Label for="stripe_plan_id">
+                                Stripe Price ID
+                                <Badge v-if="isPaidPlan" variant="destructive" class="ml-2 text-xs">
+                                    Pflichtfeld
+                                </Badge>
+                            </Label>
+                            <Input
+                                id="stripe_plan_id"
+                                v-model="form.stripe_plan_id"
+                                placeholder="price_xxxxxxxxxxxxx"
+                                :required="isPaidPlan"
+                            />
+                            <p class="text-xs text-muted-foreground">
+                                Kopiere die Price ID aus dem Stripe Dashboard (Produkt → Preise)
+                            </p>
+                            <p v-if="form.errors.stripe_plan_id" class="text-sm text-destructive">
+                                {{ form.errors.stripe_plan_id }}
+                            </p>
+                        </div>
+
+                        <!-- Preis -->
+                        <div class="space-y-2">
+                            <Label for="price">Preis (€)</Label>
+                            <Input
+                                id="price"
+                                v-model="form.price"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="9999.99"
+                                placeholder="9.99"
+                                required
+                            />
+                            <p class="text-xs text-muted-foreground">
+                                MUSS mit dem Stripe-Preis übereinstimmen. 0.00 für kostenlose Pläne.
+                            </p>
+                            <p v-if="form.errors.price" class="text-sm text-destructive">
+                                {{ form.errors.price }}
+                            </p>
+                        </div>
+
+                    </CardContent>
+                </Card>
+
                 <!-- Basis-Informationen -->
                 <Card>
                     <CardHeader>
-                        <CardTitle>Basis-Informationen</CardTitle>
+                        <CardTitle>Plan-Informationen</CardTitle>
                         <CardDescription>
-                            Name, Slug und Preis des Plans
+                            Name, Slug und Beschreibung
                         </CardDescription>
                     </CardHeader>
                     <CardContent class="space-y-4">
@@ -140,82 +236,27 @@ const submit = () => {
                             <Input
                                 id="slug"
                                 v-model="form.slug"
-                                placeholder="z.B. premium (für URLs)"
+                                placeholder="z.B. premium"
                                 required
                             />
                             <p class="text-xs text-muted-foreground">
-                                Nur Kleinbuchstaben, Zahlen und Bindestriche
+                                Eindeutige URL-ID (nur Kleinbuchstaben, Zahlen, Bindestriche)
                             </p>
                             <p v-if="form.errors.slug" class="text-sm text-destructive">
                                 {{ form.errors.slug }}
                             </p>
                         </div>
 
-                        <!-- Preis -->
+                        <!-- Beschreibung -->
                         <div class="space-y-2">
-                            <Label for="price">Preis (€) *</Label>
+                            <Label for="description">Beschreibung</Label>
                             <Input
-                                id="price"
-                                v-model="form.price"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max="9999.99"
-                                placeholder="9.99"
-                                required
+                                id="description"
+                                v-model="form.description"
+                                placeholder="Kurze Beschreibung des Plans"
                             />
-                            <p class="text-xs text-muted-foreground">
-                                0.00 für kostenlose Pläne
-                            </p>
-                            <p v-if="form.errors.price" class="text-sm text-destructive">
-                                {{ form.errors.price }}
-                            </p>
-                        </div>
-
-                        <!-- Abrechnungsintervall -->
-                        <div class="space-y-2">
-                            <Label for="billing_interval">Abrechnungsintervall *</Label>
-                            <div class="flex gap-4">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        v-model="form.billing_interval"
-                                        value="monthly"
-                                        class="h-4 w-4"
-                                    />
-                                    <span>Monatlich</span>
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        v-model="form.billing_interval"
-                                        value="yearly"
-                                        class="h-4 w-4"
-                                    />
-                                    <span>Jährlich</span>
-                                </label>
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                Für jährliche Abrechnung: Preis = Jahrespreis (z.B. 119.88€/Jahr)
-                            </p>
-                            <p v-if="form.errors.billing_interval" class="text-sm text-destructive">
-                                {{ form.errors.billing_interval }}
-                            </p>
-                        </div>
-
-                        <!-- Stripe Plan ID -->
-                        <div class="space-y-2">
-                            <Label for="stripe_plan_id">Stripe Price ID</Label>
-                            <Input
-                                id="stripe_plan_id"
-                                v-model="form.stripe_plan_id"
-                                placeholder="price_xxxxx"
-                            />
-                            <p class="text-xs text-muted-foreground">
-                                Erforderlich für bezahlte Pläne (Preis > 0)
-                            </p>
-                            <p v-if="form.errors.stripe_plan_id" class="text-sm text-destructive">
-                                {{ form.errors.stripe_plan_id }}
+                            <p v-if="form.errors.description" class="text-sm text-destructive">
+                                {{ form.errors.description }}
                             </p>
                         </div>
                     </CardContent>
@@ -287,19 +328,6 @@ const submit = () => {
                                 {{ form.errors.features }}
                             </p>
                         </div>
-
-                        <!-- Beschreibung -->
-                        <div class="space-y-2">
-                            <Label for="description">Beschreibung</Label>
-                            <Input
-                                id="description"
-                                v-model="form.description"
-                                placeholder="Kurze Beschreibung des Plans"
-                            />
-                            <p v-if="form.errors.description" class="text-sm text-destructive">
-                                {{ form.errors.description }}
-                            </p>
-                        </div>
                     </CardContent>
                 </Card>
 
@@ -317,7 +345,7 @@ const submit = () => {
                             <div class="space-y-0.5">
                                 <Label for="is_active">Plan aktiv</Label>
                                 <p class="text-xs text-muted-foreground">
-                                    Inaktive Pläne werden nicht angezeigt
+                                    Inaktive Pläne werden nicht auf der Pricing-Seite angezeigt
                                 </p>
                             </div>
                             <Switch
@@ -351,7 +379,7 @@ const submit = () => {
                                 max="100"
                             />
                             <p class="text-xs text-muted-foreground">
-                                Niedrigere Zahlen = weiter oben
+                                Niedrigere Zahlen = weiter links/oben auf der Pricing-Seite
                             </p>
                             <p v-if="form.errors.sort_order" class="text-sm text-destructive">
                                 {{ form.errors.sort_order }}

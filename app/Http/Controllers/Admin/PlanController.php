@@ -59,18 +59,18 @@ class PlanController extends Controller
     public function store(Request $request)
     {
         // Validation
+        // billing_interval wird nicht mehr benötigt - Stripe Checkout handhabt die Auswahl
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'slug' => 'required|string|max:255|unique:plans,slug|regex:/^[a-z0-9-]+$/',
             'stripe_plan_id' => 'nullable|string|max:255',
             'price' => 'required|numeric|min:0|max:9999.99',
-            'billing_interval' => 'required|in:monthly,yearly', // Abrechnungsintervall
             'max_platforms' => 'required|integer|min:1|max:1000',
             'description' => 'nullable|string',
             'features' => 'nullable|array',
             'features.*' => 'string|max:255',
             'is_active' => 'boolean',
-            'is_popular' => 'boolean', // Zeigt "Beliebt"-Badge auf Pricing-Seite
+            'is_popular' => 'boolean',
             'sort_order' => 'nullable|integer|min:0|max:100',
         ]);
 
@@ -132,12 +132,12 @@ class PlanController extends Controller
         ]);
 
         // Validation
+        // billing_interval wird nicht mehr benötigt - Stripe Checkout handhabt die Auswahl
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'slug' => 'required|string|max:255|regex:/^[a-z0-9-]+$/|unique:plans,slug,' . $plan->id,
             'stripe_plan_id' => 'nullable|string|max:255',
             'price' => 'required|numeric|min:0|max:9999.99',
-            'billing_interval' => 'required|in:monthly,yearly', // Abrechnungsintervall
             'max_platforms' => 'required|integer|min:1|max:1000',
             'description' => 'nullable|string',
             'features' => 'nullable|array',

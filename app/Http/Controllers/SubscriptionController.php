@@ -14,17 +14,43 @@ use Stripe\Checkout\Session as StripeCheckoutSession;
 class SubscriptionController extends Controller
 {
     /**
-     * Display pricing plans.
+     * Display Stripe Pricing Table.
+     *
+     * Verwendet Stripe Pricing Table für die Plan-Auswahl.
+     * Stripe handhabt automatisch monatlich/jährlich Toggle und Checkout.
+     *
+     * SETUP:
+     * 1. Stripe Dashboard → Produkte → Pricing Tables → Neue erstellen
+     * 2. STRIPE_PRICING_TABLE_ID in .env eintragen
      */
     public function index()
     {
-        $plans = Plan::where('is_active', true)
-            ->orderBy('sort_order')
-            ->get();
+        $user = auth()->user();
+
+        // Customer Session für eingeloggte User erstellen
+        // Damit Stripe den User erkennt und bestehende Subscriptions anzeigt
+        $customerSessionClientSecret = null;
+        if ($user->stripe_id) {
+            try {
+                Stripe::setApiKey(config('cashier.secret'));
+                $customerSession = \Stripe\CustomerSession::create([
+                    'customer' => $user->stripe_id,
+                    'components' => [
+                        'pricing_table' => ['enabled' => true],
+                    ],
+                ]);
+                $customerSessionClientSecret = $customerSession->client_secret;
+            } catch (\Exception $e) {
+                \Log::warning('Could not create customer session: ' . $e->getMessage());
+            }
+        }
 
         return Inertia::render('Subscription/Pricing', [
-            'plans' => $plans,
-            'currentPlan' => auth()->user()->plan,
+            'pricingTableId' => config('services.stripe.pricing_table_id'),
+            'pricingTableIdDark' => config('services.stripe.pricing_table_id_dark'),
+            'publishableKey' => config('cashier.key'),
+            'currentPlan' => $user->plan,
+            'customerSessionClientSecret' => $customerSessionClientSecret,
         ]);
     }
 

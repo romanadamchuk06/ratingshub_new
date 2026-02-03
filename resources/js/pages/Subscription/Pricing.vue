@@ -1,78 +1,110 @@
 <script setup>
 /**
- * Pricing Page mit monatlich/jährlich Toggle
+ * STRIPE PRICING TABLE
+ * ====================
  *
- * Features:
- * - Toggle zwischen monatlicher und jährlicher Abrechnung
- * - Gruppierung von Plänen nach billing_interval
- * - Anzeige der Ersparnis bei jährlicher Zahlung
- * - Free-Plan wird bei beiden Ansichten angezeigt
+ * Verwendet Stripe Pricing Table für die Plan-Auswahl.
+ * Stripe handhabt automatisch:
+ * - Monatlich/Jährlich Toggle
+ * - Checkout
+ * - Zahlungsabwicklung
+ *
+ * DARK/LIGHT MODE:
+ * - Zwei separate Pricing Tables in Stripe (eine für Light, eine für Dark)
+ * - Automatische Umschaltung basierend auf App Theme
+ *
+ * SETUP in Stripe Dashboard:
+ * 1. Produkte → Pricing Tables → Zwei erstellen (Light + Dark)
+ * 2. Light: Hintergrund #ffffff, Button #171717
+ * 3. Dark: Hintergrund #0A0A0A, Button #FAFAFA
+ * 4. Beide IDs in .env eintragen:
+ *    - STRIPE_PRICING_TABLE_ID (Light)
+ *    - STRIPE_PRICING_TABLE_ID_DARK (Dark)
  */
 
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, Zap, TrendingUp, Rocket } from 'lucide-vue-next';
+import { onMounted, onUnmounted, ref, computed } from 'vue';
 
 const props = defineProps({
-    plans: {
-        type: Array,
+    // Light Mode Pricing Table ID
+    pricingTableId: {
+        type: String,
+        required: true,
+    },
+    // Dark Mode Pricing Table ID
+    pricingTableIdDark: {
+        type: String,
+        default: null,
+    },
+    publishableKey: {
+        type: String,
         required: true,
     },
     currentPlan: {
         type: Object,
         default: null,
     },
+    customerSessionClientSecret: {
+        type: String,
+        default: null,
+    },
 });
 
-// Billing Interval State ('monthly' oder 'yearly')
-const selectedInterval = ref('monthly');
+const isLoading = ref(true);
 
-/**
- * Filtert Pläne nach ausgewähltem Intervall
- * Free-Plan wird immer angezeigt (ist immer 'monthly')
- */
-const filteredPlans = computed(() => {
-    return props.plans.filter((plan) => {
-        return plan.billing_interval === selectedInterval.value;
+// Dark Mode Erkennung
+const isDarkMode = ref(false);
+
+const updateDarkMode = () => {
+    isDarkMode.value = document.documentElement.classList.contains('dark');
+};
+
+// Aktive Pricing Table ID basierend auf Theme
+// Wenn Dark Mode aktiv UND Dark Table vorhanden → Dark Table, sonst Light Table
+const activePricingTableId = computed(() => {
+    if (isDarkMode.value && props.pricingTableIdDark) {
+        return props.pricingTableIdDark;
+    }
+    return props.pricingTableId;
+});
+
+// MutationObserver um Theme-Wechsel zu erkennen
+let observer = null;
+
+onMounted(() => {
+    updateDarkMode();
+
+    // Observer für Theme-Änderungen
+    observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.attributeName === 'class') {
+                updateDarkMode();
+            }
+        });
     });
+
+    observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class'],
+    });
+
+    // Stripe Pricing Table Script laden
+    const script = document.createElement('script');
+    script.src = 'https://js.stripe.com/v3/pricing-table.js';
+    script.async = true;
+    script.onload = () => {
+        isLoading.value = false;
+    };
+    document.head.appendChild(script);
 });
 
-const getPlanIcon = (slug) => {
-    // Slug kann jetzt -monthly oder -yearly Suffix haben, deshalb prüfen wir nur den Anfang
-    if (slug.startsWith('free')) return Zap;
-    if (slug.startsWith('basic')) return Zap;
-    if (slug.startsWith('pro')) return TrendingUp;
-    if (slug.startsWith('enterprise')) return Rocket;
-    return Zap;
-};
-
-const isCurrentPlan = (plan) => {
-    return props.currentPlan?.id === plan.id;
-};
-
-/**
- * Berechnet die monatliche Ersparnis für jährliche Pläne
- * Beispiel: Jährlich 299.99€ → monatlich 25€ statt 29.99€ → Ersparnis 5€/Monat
- */
-const getYearlySavings = (plan) => {
-    if (plan.billing_interval !== 'yearly') return null;
-
-    const monthlyEquivalent = Math.round(plan.price / 12);
-
-    // Finde den entsprechenden monatlichen Plan
-    const monthlyPlan = props.plans.find(
-        (p) => p.name === plan.name && p.billing_interval === 'monthly'
-    );
-
-    if (!monthlyPlan) return null;
-
-    const savings = monthlyPlan.price - monthlyEquivalent;
-    return savings > 0 ? Math.round(savings) : null;
-};
+onUnmounted(() => {
+    if (observer) {
+        observer.disconnect();
+    }
+});
 </script>
 
 <template>
@@ -83,177 +115,31 @@ const getYearlySavings = (plan) => {
     ]">
         <div class="space-y-8 p-4 md:p-6 lg:p-8">
             <!-- Header -->
-            <div class="text-center space-y-6">
-                <div>
-                    <h1 class="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-                        Einfache, transparente Preise
-                    </h1>
-                    <p class="mx-auto max-w-2xl text-lg text-muted-foreground">
-                        Wähle den Plan, der zu dir passt. Jederzeit kündbar.
-                    </p>
-                </div>
-
-                <!-- Billing Interval Toggle -->
-                <div class="flex items-center justify-center gap-4">
-                    <span
-                        :class="[
-                            'text-sm font-medium transition-colors',
-                            selectedInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground',
-                        ]"
-                    >
-                        Monatlich
-                    </span>
-                    <button
-                        @click="selectedInterval = selectedInterval === 'monthly' ? 'yearly' : 'monthly'"
-                        :class="[
-                            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                            selectedInterval === 'yearly' ? 'bg-primary' : 'bg-muted',
-                        ]"
-                    >
-                        <span
-                            :class="[
-                                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                                selectedInterval === 'yearly' ? 'translate-x-6' : 'translate-x-1',
-                            ]"
-                        />
-                    </button>
-                    <span
-                        :class="[
-                            'text-sm font-medium transition-colors',
-                            selectedInterval === 'yearly' ? 'text-foreground' : 'text-muted-foreground',
-                        ]"
-                    >
-                        Jährlich
-                        <Badge variant="secondary" class="ml-2 text-xs">2 Monate gratis</Badge>
-                    </span>
-                </div>
+            <div class="text-center">
+                <h1 class="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
+                    Einfache, transparente Preise
+                </h1>
+                <p class="mx-auto max-w-2xl text-lg text-muted-foreground">
+                    Wähle den Plan, der zu dir passt. Jederzeit kündbar.
+                </p>
             </div>
 
-            <!-- Pricing Cards -->
-            <div class="mx-auto grid max-w-5xl gap-6 md:grid-cols-3">
-                <Card
-                    v-for="plan in filteredPlans"
-                    :key="plan.id"
-                    :class="[
-                        'relative flex flex-col',
-                        plan.is_popular ? 'border-primary shadow-lg scale-105' : '',
-                    ]"
-                >
-                    <!-- Popular Badge - Dynamisch gesteuert über is_popular Flag -->
-                    <div v-if="plan.is_popular" class="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <Badge class="bg-primary px-3 py-1">
-                            Beliebt
-                        </Badge>
-                    </div>
+            <!-- Stripe Pricing Table -->
+            <div class="mx-auto max-w-5xl">
+                <!-- Loading State -->
+                <div v-if="isLoading" class="flex items-center justify-center py-20">
+                    <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
 
-                    <CardHeader class="text-center">
-                        <!-- Icon -->
-                        <div class="mb-4 flex justify-center">
-                            <div
-                                :class="[
-                                    'flex h-12 w-12 items-center justify-center rounded-lg',
-                                    plan.is_popular ? 'bg-primary/10' : 'bg-muted',
-                                ]"
-                            >
-                                <component
-                                    :is="getPlanIcon(plan.slug)"
-                                    :class="[
-                                        'h-6 w-6',
-                                        plan.is_popular ? 'text-primary' : 'text-muted-foreground',
-                                    ]"
-                                />
-                            </div>
-                        </div>
-
-                        <CardTitle class="text-2xl">{{ plan.name }}</CardTitle>
-                        <CardDescription>{{ plan.description }}</CardDescription>
-
-                        <!-- Price -->
-                        <div class="mt-4">
-                            <!-- Free Plan -->
-                            <div v-if="Number(plan.price) === 0" class="flex items-baseline justify-center gap-1">
-                                <span class="text-4xl font-bold">
-                                    Kostenlos
-                                </span>
-                            </div>
-                            <!-- Paid Plans -->
-                            <div v-else class="space-y-2">
-                                <div class="flex items-baseline justify-center gap-1">
-                                    <span class="text-4xl font-bold">
-                                        {{ Math.round(Number(plan.price)) }} €
-                                    </span>
-                                    <span class="text-muted-foreground">
-                                        {{ plan.billing_interval === 'yearly' ? '/Jahr' : '/Monat' }}
-                                    </span>
-                                </div>
-                                <!-- Monatlicher Äquivalent bei jährlichen Plänen -->
-                                <div v-if="plan.billing_interval === 'yearly'" class="text-sm text-muted-foreground">
-                                    {{ Math.round(plan.price / 12) }}€/Monat
-                                </div>
-                                <!-- Ersparnis-Badge bei jährlichen Plänen -->
-                                <div v-if="getYearlySavings(plan)" class="flex justify-center">
-                                    <Badge variant="secondary" class="text-xs">
-                                        Spare {{ getYearlySavings(plan) }}€/Monat
-                                    </Badge>
-                                </div>
-                            </div>
-                            <p v-if="plan.slug === 'free'" class="mt-1 text-xs text-muted-foreground">
-                                30 Tage testen
-                            </p>
-                        </div>
-                    </CardHeader>
-
-                    <CardContent class="flex-1">
-                        <!-- Features List -->
-                        <ul class="space-y-3">
-                            <li
-                                v-for="(feature, index) in plan.features"
-                                :key="index"
-                                class="flex items-start gap-2"
-                            >
-                                <Check class="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
-                                <span class="text-sm">{{ feature }}</span>
-                            </li>
-                        </ul>
-                    </CardContent>
-
-                    <CardFooter>
-                        <!-- Current Plan -->
-                        <Button
-                            v-if="isCurrentPlan(plan)"
-                            variant="outline"
-                            class="w-full"
-                            disabled
-                        >
-                            Aktueller Plan
-                        </Button>
-
-                        <!-- Free Plan -->
-                        <Link
-                            v-else-if="plan.price === 0"
-                            :href="`/subscription/checkout/${plan.id}`"
-                            class="w-full"
-                        >
-                            <Button variant="outline" class="w-full">
-                                Kostenlos starten
-                            </Button>
-                        </Link>
-
-                        <!-- Paid Plans -->
-                        <Link
-                            v-else
-                            :href="`/subscription/checkout/${plan.id}`"
-                            class="w-full"
-                        >
-                            <Button
-                                :variant="plan.is_popular ? 'default' : 'outline'"
-                                class="w-full"
-                            >
-                                Jetzt starten
-                            </Button>
-                        </Link>
-                    </CardFooter>
-                </Card>
+                <!-- Stripe Pricing Table Component -->
+                <!-- Wechselt automatisch zwischen Light/Dark Table basierend auf App Theme -->
+                <stripe-pricing-table
+                    v-show="!isLoading"
+                    :key="activePricingTableId"
+                    :pricing-table-id="activePricingTableId"
+                    :publishable-key="publishableKey"
+                    :customer-session-client-secret="customerSessionClientSecret"
+                />
             </div>
 
             <!-- Current Plan Info -->
@@ -266,11 +152,11 @@ const getYearlySavings = (plan) => {
                 </p>
             </div>
 
-            <!-- Simple Info -->
+            <!-- Info -->
             <div class="mx-auto max-w-3xl text-center">
                 <p class="text-sm text-muted-foreground">
                     Alle Pläne können jederzeit gekündigt werden. Keine versteckten Kosten.
-                    Zahlung per Kreditkarte über Stripe.
+                    Sichere Zahlung über Stripe.
                 </p>
             </div>
         </div>

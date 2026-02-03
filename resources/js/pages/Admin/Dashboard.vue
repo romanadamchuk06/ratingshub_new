@@ -3,7 +3,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import StatsCard from '@/components/StatsCard.vue';
 import { Button } from '@/components/ui/button';
-import { Users, Globe, Shield, ArrowRight, CreditCard, Ticket, Package, FileText, Bug } from 'lucide-vue-next';
+import { Users, Globe, Shield, ArrowRight, CreditCard, FileText, Bug } from 'lucide-vue-next';
 
 defineProps({
     stats: {
@@ -27,8 +27,8 @@ defineProps({
             </div>
 
             <!-- Stats Grid -->
-            <!-- 6 Karten: Users, Platforms, Subscriptions, Promo Codes, Plans, Admins -->
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+            <!-- 4 Karten: Users, Platforms, Subscriptions, Admins -->
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatsCard
                     title="Gesamte Benutzer"
                     :value="stats.totalUsers.toString()"
@@ -45,18 +45,6 @@ defineProps({
                     title="Aktive Subscriptions"
                     :value="stats.activeSubscriptions.toString()"
                     :icon="CreditCard"
-                    :loading="false"
-                />
-                <StatsCard
-                    title="Aktive Promo Codes"
-                    :value="stats.activePromoCodes.toString()"
-                    :icon="Ticket"
-                    :loading="false"
-                />
-                <StatsCard
-                    title="Subscription-Pläne"
-                    :value="stats.totalPlans.toString()"
-                    :icon="Package"
                     :loading="false"
                 />
                 <StatsCard
@@ -100,44 +88,6 @@ defineProps({
                             <Button variant="outline">
                                 <CreditCard class="mr-2 h-4 w-4" />
                                 Subscriptions verwalten
-                                <ArrowRight class="ml-2 h-4 w-4" />
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-
-                <!-- Promo Codes -->
-                <div class="rounded-xl border bg-card">
-                    <div class="border-b p-6">
-                        <h2 class="text-lg font-semibold">Promo Codes</h2>
-                    </div>
-                    <div class="p-6">
-                        <p class="mb-4 text-sm text-muted-foreground">
-                            Erstelle und verwalte Rabattcodes für Kunden.
-                        </p>
-                        <Link href="/admin/promo-codes">
-                            <Button variant="outline">
-                                <Ticket class="mr-2 h-4 w-4" />
-                                Promo Codes verwalten
-                                <ArrowRight class="ml-2 h-4 w-4" />
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-
-                <!-- Plan Management -->
-                <div class="rounded-xl border bg-card">
-                    <div class="border-b p-6">
-                        <h2 class="text-lg font-semibold">Subscription-Pläne</h2>
-                    </div>
-                    <div class="p-6">
-                        <p class="mb-4 text-sm text-muted-foreground">
-                            Erstelle und verwalte Subscription-Pläne, Preise und Features.
-                        </p>
-                        <Link href="/admin/plans">
-                            <Button variant="outline">
-                                <Package class="mr-2 h-4 w-4" />
-                                Pläne verwalten
                                 <ArrowRight class="ml-2 h-4 w-4" />
                             </Button>
                         </Link>
