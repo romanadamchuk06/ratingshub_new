@@ -38,7 +38,18 @@ class SubscriptionController extends Controller
     {
         $user = auth()->user();
 
-        // Customer Session für eingeloggte User erstellen
+        // WICHTIG: Stripe Customer erstellen falls noch nicht vorhanden
+        // Damit der Webhook den User später finden kann (über stripe_id)
+        if (!$user->stripe_id) {
+            try {
+                $user->createAsStripeCustomer();
+                \Log::info('Stripe Customer erstellt für User', ['user_id' => $user->id, 'stripe_id' => $user->stripe_id]);
+            } catch (\Exception $e) {
+                \Log::error('Stripe Customer konnte nicht erstellt werden: ' . $e->getMessage());
+            }
+        }
+
+        // Customer Session für Pricing Table erstellen
         // Damit Stripe den User erkennt und bestehende Subscriptions anzeigt
         $customerSessionClientSecret = null;
         if ($user->stripe_id) {
