@@ -279,13 +279,13 @@ class StripeWebhookController extends CashierController
         $data = $payload['data']['object'];
 
         \Log::error('Stripe Webhook: Payment Failed', [
-            'invoice_id' => $data['id'],
-            'customer_id' => $data['customer'],
-            'amount' => $data['amount_due'] / 100, // Cents → Euro
-            'attempt_count' => $data['attempt_count'],
+            'invoice_id' => $data['id'] ?? null,
+            'customer_id' => $data['customer'] ?? null,
+            'amount' => ($data['amount_due'] ?? 0) / 100, // Cents → Euro
+            'attempt_count' => $data['attempt_count'] ?? 0,
         ]);
 
-        $user = $this->getUserByStripeId($data['customer']);
+        $user = $this->getUserByStripeId($data['customer'] ?? null);
 
         if ($user) {
             // Benachrichtigung an User
@@ -301,12 +301,11 @@ class StripeWebhookController extends CashierController
             \Log::warning('Payment Failed - Benachrichtigung gesendet', [
                 'user_id' => $user->id,
                 'email' => $user->email,
-                'amount' => $data['amount_due'] / 100,
+                'amount' => ($data['amount_due'] ?? 0) / 100,
             ]);
         }
 
-        // Standard Cashier Handling
-        return parent::handleInvoicePaymentFailed($payload);
+        return $this->successMethod();
     }
 
     /**
@@ -321,10 +320,10 @@ class StripeWebhookController extends CashierController
         \Log::info('Stripe Webhook: Payment Succeeded', [
             'invoice_id' => $data['id'],
             'customer_id' => $data['customer'],
-            'amount' => $data['amount_paid'] / 100,
+            'amount' => ($data['amount_paid'] ?? 0) / 100,
         ]);
 
-        $user = $this->getUserByStripeId($data['customer']);
+        $user = $this->getUserByStripeId($data['customer'] ?? null);
 
         if ($user) {
             // Grace Period aufheben (falls aktiv)
@@ -338,8 +337,7 @@ class StripeWebhookController extends CashierController
             }
         }
 
-        // Standard Cashier Handling
-        return parent::handleInvoicePaymentSucceeded($payload);
+        return $this->successMethod();
     }
 
     /**

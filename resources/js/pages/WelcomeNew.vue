@@ -5,16 +5,16 @@
  * Eine moderne, professionelle Landing Page mit:
  * - Hero Section mit CTA
  * - Features Section
- * - Pricing Section
+ * - Pricing Section (Stripe Pricing Table)
  * - Social Proof
  * - FAQ
  * - Footer
  */
 
 import { Head, Link } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import AppLogo from '@/components/AppLogo.vue';
 import {
@@ -24,7 +24,6 @@ import {
     Zap,
     Shield,
     Globe,
-    Check,
     ArrowRight,
     ChevronDown,
     Award,
@@ -32,10 +31,67 @@ import {
     MapPin
 } from 'lucide-vue-next';
 
-defineProps({
+const props = defineProps({
     canRegister: Boolean,
-    isAuthenticated: Boolean, // Ist User eingeloggt?
-    plans: Array, // Plans aus der Datenbank
+    isAuthenticated: Boolean,
+    // Stripe Pricing Table IDs
+    pricingTableId: String,
+    pricingTableIdDark: String,
+    publishableKey: String,
+});
+
+// Dark Mode Erkennung für Pricing Table
+const isDarkMode = ref(false);
+const pricingTableLoaded = ref(false);
+
+const updateDarkMode = () => {
+    isDarkMode.value = document.documentElement.classList.contains('dark');
+};
+
+const activePricingTableId = computed(() => {
+    if (isDarkMode.value && props.pricingTableIdDark) {
+        return props.pricingTableIdDark;
+    }
+    return props.pricingTableId;
+});
+
+let observer = null;
+
+onMounted(() => {
+    updateDarkMode();
+
+    // Observer für Theme-Änderungen
+    observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.attributeName === 'class') {
+                updateDarkMode();
+            }
+        });
+    });
+
+    observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class'],
+    });
+
+    // Stripe Pricing Table Script laden
+    if (!document.querySelector('script[src*="pricing-table.js"]')) {
+        const script = document.createElement('script');
+        script.src = 'https://js.stripe.com/v3/pricing-table.js';
+        script.async = true;
+        script.onload = () => {
+            pricingTableLoaded.value = true;
+        };
+        document.head.appendChild(script);
+    } else {
+        pricingTableLoaded.value = true;
+    }
+});
+
+onUnmounted(() => {
+    if (observer) {
+        observer.disconnect();
+    }
 });
 
 // Features Liste
@@ -438,8 +494,8 @@ const toggleFaq = (index) => {
             </div>
         </section>
 
-        <!-- Pricing Section -->
-        <section id="pricing" class="container mx-auto px-4 py-20 md:py-32 bg-muted/30 -mx-4">
+        <!-- Pricing Section mit Stripe Pricing Table -->
+        <section id="pricing" class="container mx-auto px-4 py-20 md:py-32">
             <div class="text-center space-y-4 mb-16">
                 <Badge variant="secondary">Preise</Badge>
                 <h2 class="text-3xl md:text-4xl font-bold">
@@ -450,53 +506,25 @@ const toggleFaq = (index) => {
                 </p>
             </div>
 
-            <div class="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                <Card
-                    v-for="plan in plans"
-                    :key="plan.id"
-                    :class="[
-                        'relative',
-                        plan.is_popular ? 'border-primary shadow-lg scale-105' : ''
-                    ]"
-                >
-                    <Badge v-if="plan.is_popular" class="absolute -top-3 left-1/2 -translate-x-1/2">
-                        Beliebteste Wahl
-                    </Badge>
+            <!-- Stripe Pricing Table -->
+            <div class="max-w-5xl mx-auto">
+                <!-- Loading State -->
+                <div v-if="!pricingTableLoaded" class="flex items-center justify-center py-20">
+                    <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
 
-                    <CardHeader class="pb-6">
-                        <CardTitle class="text-2xl">{{ plan.name }}</CardTitle>
-                        <CardDescription>{{ plan.description }}</CardDescription>
-                        <div class="mt-4">
-                            <span class="text-4xl font-bold">€{{ plan.price }}</span>
-                            <span class="text-muted-foreground">/Monat</span>
-                        </div>
-                    </CardHeader>
-
-                    <CardContent class="space-y-4">
-                        <ul class="space-y-3">
-                            <li v-for="feature in plan.features" :key="feature" class="flex items-start gap-2">
-                                <Check class="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                                <span class="text-sm">{{ feature }}</span>
-                            </li>
-                        </ul>
-                    </CardContent>
-
-                    <CardFooter>
-                        <Link href="/register" class="w-full">
-                            <Button
-                                :variant="plan.is_popular ? 'default' : 'outline'"
-                                class="w-full"
-                                size="lg"
-                            >
-                                Jetzt starten
-                            </Button>
-                        </Link>
-                    </CardFooter>
-                </Card>
+                <!-- Stripe Pricing Table Component -->
+                <stripe-pricing-table
+                    v-if="pricingTableId"
+                    v-show="pricingTableLoaded"
+                    :key="activePricingTableId"
+                    :pricing-table-id="activePricingTableId"
+                    :publishable-key="publishableKey"
+                />
             </div>
 
             <p class="text-center text-sm text-muted-foreground mt-8">
-                Alle Preise zzgl. MwSt. • 14 Tage Geld-zurück-Garantie
+                Alle Preise zzgl. MwSt. • Jederzeit kündbar
             </p>
         </section>
 

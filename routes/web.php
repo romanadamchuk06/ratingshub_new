@@ -26,15 +26,13 @@ Route::post('/stripe/webhook', [App\Http\Controllers\StripeWebhookController::cl
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::get('/', function () {
-    // Aktive Pläne aus der Datenbank laden, sortiert nach sort_order
-    $plans = \App\Models\Plan::where('is_active', true)
-        ->orderBy('sort_order')
-        ->get(['id', 'name', 'slug', 'price', 'description', 'features', 'is_popular']);
-
     return Inertia::render('WelcomeNew', [
         'canRegister' => Features::enabled(Features::registration()),
-        'isAuthenticated' => auth()->check(), // Ist User eingeloggt?
-        'plans' => $plans,
+        'isAuthenticated' => auth()->check(),
+        // Stripe Pricing Table IDs (Light + Dark)
+        'pricingTableId' => config('services.stripe.pricing_table_id'),
+        'pricingTableIdDark' => config('services.stripe.pricing_table_id_dark'),
+        'publishableKey' => config('cashier.key'),
     ]);
 })->name('home');
 

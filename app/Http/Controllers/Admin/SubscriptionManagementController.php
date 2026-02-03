@@ -80,6 +80,8 @@ class SubscriptionManagementController extends Controller
             ->get();
 
         // Statistiken berechnen
+        // Hinweis: Revenue-Berechnung wurde entfernt, da Stripe jetzt monatlich/jährlich
+        // über separate Price IDs handhabt. Nutze Stripe Dashboard für Revenue-Daten.
         $stats = [
             'totalUsers' => User::count(),
             'activeSubscriptions' => User::whereHas('subscriptions', function ($q) {
@@ -91,18 +93,8 @@ class SubscriptionManagementController extends Controller
             'freeUsers' => User::whereDoesntHave('subscriptions', function ($q) {
                 $q->where('type', 'default');
             })->count(),
-            'monthlyRevenue' => Plan::join('users', 'plans.id', '=', 'users.plan_id')
-                ->whereHas('users.subscriptions', function ($q) {
-                    $q->where('type', 'default')->whereNull('ends_at');
-                })
-                ->where('plans.billing_interval', 'monthly')
-                ->sum('plans.price'),
-            'yearlyRevenue' => Plan::join('users', 'plans.id', '=', 'users.plan_id')
-                ->whereHas('users.subscriptions', function ($q) {
-                    $q->where('type', 'default')->whereNull('ends_at');
-                })
-                ->where('plans.billing_interval', 'yearly')
-                ->sum('plans.price'),
+            // Anzahl User pro Plan (nützlicher als ungenaue Revenue-Berechnung)
+            'usersWithPlan' => User::whereNotNull('plan_id')->count(),
         ];
 
         // Letzte Aktivitäten

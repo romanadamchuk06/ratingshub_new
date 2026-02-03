@@ -179,10 +179,10 @@ const formatDate = (dateString) => {
     });
 };
 
-const formatPrice = (price, interval) => {
+const formatPrice = (price) => {
     if (!price || price == 0) return 'Kostenlos';
-    const suffix = interval === 'yearly' ? '/Jahr' : '/Monat';
-    return `${Number(price).toFixed(2).replace('.', ',')} €${suffix}`;
+    // Preis wird als Basis-Monatspreis angezeigt (Stripe handhabt monatlich/jährlich)
+    return `${Number(price).toFixed(2).replace('.', ',')} €/Monat`;
 };
 
 const formatCurrency = (amount) => {
@@ -248,13 +248,13 @@ const formatActivityAction = (action) => {
                 </Card>
                 <Card>
                     <CardHeader class="flex flex-row items-center justify-between pb-2">
-                        <CardTitle class="text-sm font-medium">Monatlicher Umsatz</CardTitle>
+                        <CardTitle class="text-sm font-medium">Bezahlte User</CardTitle>
                         <TrendingUp class="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div class="text-2xl font-bold">{{ formatCurrency(stats.monthlyRevenue) }}</div>
+                        <div class="text-2xl font-bold">{{ stats.usersWithPlan }}</div>
                         <p class="text-xs text-muted-foreground">
-                            + {{ formatCurrency(stats.yearlyRevenue / 12) }}/Monat (jährlich)
+                            mit aktivem Plan
                         </p>
                     </CardContent>
                 </Card>
@@ -358,19 +358,14 @@ const formatActivityAction = (action) => {
 
                                 <!-- Plan -->
                                 <TableCell>
-                                    <div class="flex items-center gap-2">
-                                        <Badge variant="outline">
-                                            {{ user.plan?.name || 'Kein Plan' }}
-                                        </Badge>
-                                        <Badge v-if="user.plan?.billing_interval === 'yearly'" variant="secondary" class="text-xs">
-                                            Jährlich
-                                        </Badge>
-                                    </div>
+                                    <Badge variant="outline">
+                                        {{ user.plan?.name || 'Kein Plan' }}
+                                    </Badge>
                                 </TableCell>
 
                                 <!-- Price -->
                                 <TableCell>
-                                    {{ formatPrice(user.plan?.price, user.plan?.billing_interval) }}
+                                    {{ formatPrice(user.plan?.price) }}
                                 </TableCell>
 
                                 <!-- Status -->
@@ -521,7 +516,7 @@ const formatActivityAction = (action) => {
                                 <div class="flex items-center gap-2">
                                     {{ plan.name }}
                                     <span class="text-muted-foreground">
-                                        ({{ formatPrice(plan.price, plan.billing_interval) }})
+                                        ({{ formatPrice(plan.price) }})
                                     </span>
                                 </div>
                             </SelectItem>

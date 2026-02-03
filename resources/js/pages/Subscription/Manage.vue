@@ -71,22 +71,11 @@ const props = defineProps({
 
 const loading = ref(false);
 
-// Ist der Plan jährlich?
-const isYearly = computed(() => props.currentPlan?.billing_interval === 'yearly');
-
-// Formatierter Preis mit Intervall
+// Formatierter Preis (Stripe handhabt monatlich/jährlich über Pricing Table)
 const formattedPrice = computed(() => {
     const price = Number(props.currentPlan?.price || 0);
     if (price === 0) return 'Kostenlos';
-    const interval = isYearly.value ? '/Jahr' : '/Monat';
-    return `${price.toFixed(2).replace('.', ',')} €${interval}`;
-});
-
-// Monatlicher Äquivalent bei jährlicher Zahlung
-const monthlyEquivalent = computed(() => {
-    if (!isYearly.value) return null;
-    const yearly = Number(props.currentPlan?.price || 0);
-    return (yearly / 12).toFixed(2).replace('.', ',');
+    return `${price.toFixed(2).replace('.', ',')} €/Monat`;
 });
 
 const cancelSubscription = () => {
@@ -179,21 +168,11 @@ const status = getSubscriptionStatus();
                         <!-- Plan Details -->
                         <div class="flex items-center justify-between">
                             <span class="text-sm text-muted-foreground">Plan</span>
-                            <div class="text-right">
-                                <span class="font-semibold">{{ currentPlan.name }}</span>
-                                <Badge v-if="isYearly" variant="secondary" class="ml-2 text-xs">
-                                    Jährlich
-                                </Badge>
-                            </div>
+                            <span class="font-semibold">{{ currentPlan.name }}</span>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-sm text-muted-foreground">Preis</span>
-                            <div class="text-right">
-                                <span class="font-semibold">{{ formattedPrice }}</span>
-                                <p v-if="monthlyEquivalent" class="text-xs text-muted-foreground">
-                                    ({{ monthlyEquivalent }} €/Monat)
-                                </p>
-                            </div>
+                            <span class="font-semibold">{{ formattedPrice }}</span>
                         </div>
 
                         <!-- Zahlungsdetails: Nur bei Cashier subscriptions -->

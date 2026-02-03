@@ -94,27 +94,43 @@ class SubscriptionController extends Controller
     {
         $user = auth()->user();
 
-        // Zahlungsmethode abrufen (falls vorhanden)
+        // Zahlungsmethode abrufen (nur wenn stripe_id vorhanden)
         $paymentMethod = null;
-        if ($user->hasDefaultPaymentMethod()) {
-            $pm = $user->defaultPaymentMethod();
-            $paymentMethod = [
-                'brand' => $pm->card->brand ?? 'card',
-                'last4' => $pm->card->last4 ?? '****',
-                'exp_month' => $pm->card->exp_month ?? null,
-                'exp_year' => $pm->card->exp_year ?? null,
-            ];
+        $subscription = null;
+        $invoices = [];
+
+        if ($user->stripe_id) {
+            try {
+                // Subscription abrufen
+                $subscription = $user->subscription('default');
+
+                // Rechnungen abrufen
+                $invoices = $user->invoices();
+
+                // Zahlungsmethode abrufen
+                if ($user->hasDefaultPaymentMethod()) {
+                    $pm = $user->defaultPaymentMethod();
+                    $paymentMethod = [
+                        'brand' => $pm->card->brand ?? 'card',
+                        'last4' => $pm->card->last4 ?? '****',
+                        'exp_month' => $pm->card->exp_month ?? null,
+                        'exp_year' => $pm->card->exp_year ?? null,
+                    ];
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Error fetching Stripe data for user: ' . $e->getMessage());
+            }
         }
 
         return Inertia::render('Subscription/Manage', [
             // Cashier subscription (null wenn kein aktives Abo)
-            'subscription' => $user->subscription('default'),
+            'subscription' => $subscription,
 
             // Plan-Details (aus plan_id)
             'currentPlan' => $user->plan,
 
             // Rechnungen (nur bei Cashier subscriptions)
-            'invoices' => $user->invoices(),
+            'invoices' => $invoices,
 
             // Zahlungsmethode
             'paymentMethod' => $paymentMethod,
