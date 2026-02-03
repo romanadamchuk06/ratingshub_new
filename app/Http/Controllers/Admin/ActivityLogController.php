@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\UserActivityLog;
 use App\Models\PlanActivityLog;
 use App\Models\SubscriptionActivityLog;
-use App\Models\PromoCodeActivityLog;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -24,7 +23,7 @@ use Inertia\Response;
  *
  * Features:
  * - Alle Logs zusammen anzeigen
- * - Nach Typ filtern (User, Plan, Subscription, PromoCode)
+ * - Nach Typ filtern (User, Plan, Subscription)
  * - Nach Datum filtern
  * - Nach Aktion filtern
  * - Nach User filtern
@@ -44,7 +43,7 @@ class ActivityLogController extends Controller
     public function index(Request $request): Response
     {
         // Filter-Parameter
-        $type = $request->input('type', 'all'); // all, user, plan, subscription, promo_code
+        $type = $request->input('type', 'all'); // all, user, plan, subscription
         $action = $request->input('action');
         $userId = $request->input('user_id');
         $dateFrom = $request->input('date_from');
@@ -135,33 +134,6 @@ class ActivityLogController extends Controller
             $logs = $logs->concat($subLogs);
         }
 
-        if ($type === 'all' || $type === 'promo_code') {
-            $promoLogs = PromoCodeActivityLog::with(['performedBy', 'usedBy'])
-                ->when($action, fn($q) => $q->where('action', $action))
-                ->when($userId, fn($q) => $q->where('performed_by_user_id', $userId))
-                ->when($dateFrom, fn($q) => $q->where('created_at', '>=', $dateFrom))
-                ->when($dateTo, fn($q) => $q->where('created_at', '<=', $dateTo))
-                ->when($search, fn($q) => $q->where('description', 'like', "%{$search}%"))
-                ->latest()
-                ->limit($type === 'all' ? 50 : 100)
-                ->get()
-                ->map(fn($log) => [
-                    'id' => $log->id,
-                    'type' => 'promo_code',
-                    'type_label' => 'Promo-Code',
-                    'performed_by' => $log->performedBy?->name ?? ($log->usedBy?->name ?? 'System'),
-                    'target' => $log->promo_code,
-                    'action' => $log->action,
-                    'action_label' => $this->getActionLabel($log->action),
-                    'changes' => $log->changes,
-                    'description' => $log->description,
-                    'ip_address' => $log->ip_address,
-                    'created_at' => $log->created_at,
-                ]);
-
-            $logs = $logs->concat($promoLogs);
-        }
-
         // Nach Datum sortieren (neueste zuerst)
         $logs = $logs->sortByDesc('created_at')->take(100)->values();
 
@@ -196,7 +168,7 @@ class ActivityLogController extends Controller
             'resumed' => 'Wieder aktiviert',
             'cancelled_now' => 'Sofort beendet',
             'payment_method_updated' => 'Zahlungsmethode geändert',
-            'used' => 'Verwendet',
+            'subscription_ended' => 'Abo beendet',
             default => ucfirst($action),
         };
     }

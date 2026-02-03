@@ -3,10 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Plan;
-use App\Models\PromoCode;
 use App\Models\User;
 use App\Models\SubscriptionActivityLog;
-use App\Models\PromoCodeActivityLog;
 use App\Notifications\SubscriptionCancelled;
 use App\Notifications\PaymentFailed;
 use Illuminate\Http\Request;
@@ -32,10 +30,96 @@ use Laravel\Cashier\Http\Controllers\WebhookController as CashierController;
 class StripeWebhookController extends CashierController
 {
     /**
+     * Handle customer subscription created
+     *
+     * WICHTIG für Stripe Pricing Table!
+     * Die Pricing Table sendet kein metadata, daher müssen wir
+     * den Plan anhand der Stripe Price ID ermitteln.
+     *
+     * Flow:
+     * 1. Kunde wählt Plan in Pricing Table
+     * 2. Stripe erstellt Subscription mit Price ID
+     * 3. Dieser Webhook setzt plan_id basierend auf stripe_plan_id
+     */
+    public function handleCustomerSubscriptionCreated(array $payload)
+    {
+        $data = $payload['data']['object'];
+
+        \Log::info('Stripe Webhook: Subscription Created', [
+            'subscription_id' => $data['id'],
+            'customer_id' => $data['customer'],
+            'status' => $data['status'],
+            'items' => $data['items']['data'] ?? [],
+        ]);
+
+        $user = $this->getUserByStripeId($data['customer']);
+
+        if (!$user) {
+            \Log::warning('User nicht gefunden für Stripe Customer', [
+                'customer_id' => $data['customer'],
+            ]);
+            return response('OK', 200);
+        }
+
+        // Stripe Price ID aus Subscription Items holen
+        $stripePriceId = $data['items']['data'][0]['price']['id'] ?? null;
+
+        if (!$stripePriceId) {
+            \Log::error('Keine Price ID in Subscription gefunden', [
+                'subscription_id' => $data['id'],
+            ]);
+            return response('OK', 200);
+        }
+
+        // Plan anhand Stripe Price ID finden
+        $plan = Plan::findByStripePrice($stripePriceId);
+
+        if (!$plan) {
+            \Log::error('Kein Plan für Stripe Price ID gefunden', [
+                'stripe_price_id' => $stripePriceId,
+                'subscription_id' => $data['id'],
+            ]);
+            return response('OK', 200);
+        }
+
+        // Plan dem User zuweisen
+        $oldPlan = $user->plan;
+        $user->plan_id = $plan->id;
+        $user->ends_grace_period_at = null; // Grace Period aufheben
+        $user->save();
+
+        // Activity Log
+        SubscriptionActivityLog::log(
+            performedBy: $user,
+            targetUser: $user,
+            plan: $plan,
+            action: 'subscribed',
+            changes: [
+                'from_plan' => $oldPlan?->name,
+                'to_plan' => $plan->name,
+                'stripe_price_id' => $stripePriceId,
+                'source' => 'pricing_table',
+            ],
+            stripeSubscriptionId: $data['id'] ?? null,
+            description: "Plan '{$plan->name}' via Stripe Pricing Table abonniert"
+        );
+
+        \Log::info('Plan erfolgreich zugewiesen via Pricing Table', [
+            'user_id' => $user->id,
+            'plan_id' => $plan->id,
+            'plan_name' => $plan->name,
+            'stripe_price_id' => $stripePriceId,
+        ]);
+
+        // Standard Cashier Handling
+        return parent::handleCustomerSubscriptionCreated($payload);
+    }
+
+    /**
      * Handle customer subscription updated
      *
      * Wird aufgerufen wenn:
-     * - Plan gewechselt wird
+     * - Plan gewechselt wird (wichtig!)
      * - Abo reaktiviert wird
      * - Status sich ändert (active, past_due, canceled, etc.)
      */
@@ -49,35 +133,60 @@ class StripeWebhookController extends CashierController
             'status' => $data['status'],
         ]);
 
-        // Wenn Subscription aktiv ist, Grace Period aufheben
-        if ($data['status'] === 'active') {
-            $user = $this->getUserByStripeId($data['customer']);
-            if ($user) {
-                $user->ends_grace_period_at = null;
-                $user->save();
+        $user = $this->getUserByStripeId($data['customer']);
 
-                \Log::info('Grace Period aufgehoben für User', [
+        if (!$user) {
+            return parent::handleCustomerSubscriptionUpdated($payload);
+        }
+
+        // Plan-Wechsel erkennen und aktualisieren
+        $stripePriceId = $data['items']['data'][0]['price']['id'] ?? null;
+        if ($stripePriceId) {
+            $newPlan = Plan::findByStripePrice($stripePriceId);
+            if ($newPlan && $user->plan_id !== $newPlan->id) {
+                $oldPlan = $user->plan;
+                $user->plan_id = $newPlan->id;
+
+                SubscriptionActivityLog::log(
+                    performedBy: $user,
+                    targetUser: $user,
+                    plan: $newPlan,
+                    action: 'plan_changed',
+                    changes: [
+                        'from_plan' => $oldPlan?->name,
+                        'to_plan' => $newPlan->name,
+                        'stripe_price_id' => $stripePriceId,
+                    ],
+                    stripeSubscriptionId: $data['id'] ?? null,
+                    description: "Plan gewechselt: {$oldPlan?->name} → {$newPlan->name}"
+                );
+
+                \Log::info('Plan gewechselt', [
                     'user_id' => $user->id,
-                    'email' => $user->email,
+                    'old_plan' => $oldPlan?->name,
+                    'new_plan' => $newPlan->name,
                 ]);
             }
+        }
+
+        // Wenn Subscription aktiv ist, Grace Period aufheben
+        if ($data['status'] === 'active') {
+            $user->ends_grace_period_at = null;
+            \Log::info('Grace Period aufgehoben für User', [
+                'user_id' => $user->id,
+            ]);
         }
 
         // Wenn Status "past_due" (Zahlung überfällig), Grace Period setzen
-        if ($data['status'] === 'past_due') {
-            $user = $this->getUserByStripeId($data['customer']);
-            if ($user && !$user->ends_grace_period_at) {
-                // Grace Period: 3 Tage ab jetzt
-                $user->ends_grace_period_at = now()->addDays(3);
-                $user->save();
-
-                \Log::warning('Grace Period gestartet für User', [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'ends_at' => $user->ends_grace_period_at,
-                ]);
-            }
+        if ($data['status'] === 'past_due' && !$user->ends_grace_period_at) {
+            $user->ends_grace_period_at = now()->addDays(3);
+            \Log::warning('Grace Period gestartet für User', [
+                'user_id' => $user->id,
+                'ends_at' => $user->ends_grace_period_at,
+            ]);
         }
+
+        $user->save();
 
         // Standard Cashier Handling
         return parent::handleCustomerSubscriptionUpdated($payload);
@@ -90,6 +199,8 @@ class StripeWebhookController extends CashierController
      * - Abo vom User gekündigt wird
      * - Abo wegen Zahlungsausfall endet
      * - Grace Period abgelaufen ist
+     *
+     * WICHTIG: User wird auf Free Plan zurückgesetzt!
      */
     public function handleCustomerSubscriptionDeleted(array $payload)
     {
@@ -104,8 +215,35 @@ class StripeWebhookController extends CashierController
         $user = $this->getUserByStripeId($data['customer']);
 
         if ($user) {
+            $oldPlan = $user->plan;
+
             // Grace Period zurücksetzen
             $user->ends_grace_period_at = null;
+
+            // WICHTIG: Plan auf NULL setzen = kein Zugriff mehr
+            // User muss neues Abo abschließen um Features zu nutzen
+            $user->plan_id = null;
+
+            // Activity Log
+            SubscriptionActivityLog::log(
+                performedBy: $user,
+                targetUser: $user,
+                plan: $oldPlan,
+                action: 'subscription_ended',
+                changes: [
+                    'from_plan' => $oldPlan?->name,
+                    'to_plan' => null,
+                    'reason' => 'subscription_deleted',
+                ],
+                stripeSubscriptionId: $data['id'] ?? null,
+                description: "Abo beendet - Zugriff gesperrt (war: {$oldPlan?->name})"
+            );
+
+            \Log::info('User Abo beendet - kein Zugriff mehr', [
+                'user_id' => $user->id,
+                'old_plan' => $oldPlan?->name,
+            ]);
+
             $user->save();
 
             // Benachrichtigung senden
@@ -232,7 +370,6 @@ class StripeWebhookController extends CashierController
         $metadata = $session['metadata'] ?? [];
         $userId = $metadata['user_id'] ?? null;
         $planId = $metadata['plan_id'] ?? null;
-        $promoCodeStr = $metadata['promo_code'] ?? null;
 
         if (!$userId || !$planId) {
             \Log::warning('Checkout Session ohne User/Plan Metadata', [
@@ -256,27 +393,8 @@ class StripeWebhookController extends CashierController
             // Plan-ID auf User setzen
             $user->update(['plan_id' => $plan->id]);
 
-            // Promo Code als verwendet markieren (falls vorhanden)
-            if ($promoCodeStr) {
-                $promoCode = PromoCode::where('code', strtoupper($promoCodeStr))->first();
-                if ($promoCode) {
-                    $promoCode->markAsUsed($user);
-
-                    PromoCodeActivityLog::log(
-                        performedBy: $user,
-                        promoCode: $promoCode,
-                        action: 'used',
-                        usedBy: $user,
-                        changes: [
-                            'plan' => $plan->name,
-                            'checkout_session' => $session['id'],
-                        ],
-                        description: "Promo-Code '{$promoCode->code}' verwendet via Stripe Checkout"
-                    );
-                }
-            }
-
             // Subscription Activity Log
+            // (Promo Codes werden jetzt direkt in Stripe verwaltet)
             SubscriptionActivityLog::log(
                 performedBy: $user,
                 targetUser: $user,
@@ -285,7 +403,6 @@ class StripeWebhookController extends CashierController
                 changes: [
                     'plan' => $plan->name,
                     'type' => 'stripe_checkout',
-                    'promo_code' => $promoCodeStr,
                     'checkout_session_id' => $session['id'],
                 ],
                 stripeSubscriptionId: $session['subscription'] ?? null,

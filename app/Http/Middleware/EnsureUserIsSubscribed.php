@@ -37,22 +37,36 @@ class EnsureUserIsSubscribed
         }
 
         // Prüfe ob User ein aktives Abo hat
-        // WICHTIG: Wir prüfen drei Systeme:
+        // WICHTIG: Wir prüfen folgende Bedingungen:
         // 1. Plan-basiert: user.plan_id (direktes Plan-Assignment)
-        // 2. Cashier-basiert: subscriptions Tabelle (Stripe/Paddle Integration)
+        // 2. Cashier-basiert: subscriptions Tabelle (Stripe Integration)
         // 3. Trial-Phase: user.trial_ends_at in der Zukunft
         // 4. Grace Period: user.ends_grace_period_at in der Zukunft
-        $hasAccess = $user && (
-            $user->plan_id !== null ||              // User hat direkt zugewiesenen Plan
+
+        // Kein Plan = Abo abgelaufen oder nie abgeschlossen
+        if (!$user || $user->plan_id === null) {
+            // Prüfe ob User noch in Grace Period ist
+            if ($user && $this->hasValidGracePeriod($user)) {
+                // User ist in Grace Period - Zugriff erlaubt aber Warnung
+                return $next($request);
+            }
+
+            // Kein Zugriff - Abo nicht aktiv
+            return redirect()->route('subscription.index')
+                ->with('error', 'Dein Abonnement ist nicht mehr aktiv. Bitte schließe ein neues Abo ab, um die Plattform zu nutzen.');
+        }
+
+        // Prüfe ob User ein aktives Abo hat (Cashier oder Trial)
+        $hasAccess = (
             $user->subscribed($subscription) ||      // User hat Cashier Subscription
             $this->hasValidTrial($user) ||           // User ist in Trial-Phase
-            $this->hasValidGracePeriod($user)        // User ist in Grace Period
+            $this->hasValidGracePeriod($user) ||     // User ist in Grace Period
+            $user->plan_id !== null                  // User hat zugewiesenen Plan
         );
 
         if (!$hasAccess) {
-            // Redirect zu Subscription-Seite mit Nachricht
             return redirect()->route('subscription.index')
-                ->with('error', 'Du benötigst ein aktives Abonnement, um auf diese Funktion zuzugreifen.');
+                ->with('error', 'Dein Abonnement ist nicht mehr aktiv. Bitte schließe ein neues Abo ab, um die Plattform zu nutzen.');
         }
 
         return $next($request);

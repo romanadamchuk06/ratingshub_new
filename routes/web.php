@@ -241,11 +241,10 @@ Route::middleware(['auth', 'verified'])->prefix('platforms')->name('platforms.')
     Route::delete('/{platform}', [PlatformController::class, 'disconnect'])->name('disconnect');
 });
 
-// Subscription Routes
+// Subscription Routes (vereinfacht für Stripe Pricing Table)
+// Checkout/Subscribe werden direkt über Stripe Pricing Table abgewickelt
 Route::middleware(['auth', 'verified'])->prefix('subscription')->name('subscription.')->group(function () {
     Route::get('/', [App\Http\Controllers\SubscriptionController::class, 'index'])->name('index');
-    Route::get('/checkout/{plan}', [App\Http\Controllers\SubscriptionController::class, 'checkout'])->name('checkout');
-    Route::post('/subscribe/{plan}', [App\Http\Controllers\SubscriptionController::class, 'subscribe'])->name('subscribe');
     Route::get('/success', [App\Http\Controllers\SubscriptionController::class, 'success'])->name('success');
     Route::get('/manage', [App\Http\Controllers\SubscriptionController::class, 'manage'])->name('manage');
     Route::post('/cancel', [App\Http\Controllers\SubscriptionController::class, 'cancel'])->name('cancel');
@@ -291,6 +290,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('subscriptions/{user}/cancel', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'cancelSubscription'])->name('subscriptions.cancel');
     Route::post('subscriptions/{user}/cancel-now', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'cancelSubscriptionNow'])->name('subscriptions.cancel-now');
     Route::post('subscriptions/{user}/resume', [\App\Http\Controllers\Admin\SubscriptionManagementController::class, 'resumeSubscription'])->name('subscriptions.resume');
+
+    // Plan Management (Stripe Price IDs konfigurieren)
+    Route::get('plans', [\App\Http\Controllers\Admin\PlanController::class, 'index'])->name('plans.index');
+    Route::get('plans/{plan}/edit', [\App\Http\Controllers\Admin\PlanController::class, 'edit'])->name('plans.edit');
+    Route::patch('plans/{plan}', [\App\Http\Controllers\Admin\PlanController::class, 'update'])->name('plans.update');
 
     // Activity Logs (READ-ONLY - keine Edit/Delete!)
     Route::get('activity-logs', [\App\Http\Controllers\Admin\ActivityLogController::class, 'index'])->name('activity-logs.index');

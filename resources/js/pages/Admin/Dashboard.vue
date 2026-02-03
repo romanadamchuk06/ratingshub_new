@@ -3,7 +3,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import StatsCard from '@/components/StatsCard.vue';
 import { Button } from '@/components/ui/button';
-import { Users, Globe, Shield, ArrowRight, CreditCard, FileText, Bug } from 'lucide-vue-next';
+import { Users, Globe, Shield, ArrowRight, CreditCard, FileText, Bug, Package } from 'lucide-vue-next';
 
 defineProps({
     stats: {
@@ -88,6 +88,25 @@ defineProps({
                             <Button variant="outline">
                                 <CreditCard class="mr-2 h-4 w-4" />
                                 Subscriptions verwalten
+                                <ArrowRight class="ml-2 h-4 w-4" />
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- Plan Management -->
+                <div class="rounded-xl border bg-card">
+                    <div class="border-b p-6">
+                        <h2 class="text-lg font-semibold">Tarife & Stripe</h2>
+                    </div>
+                    <div class="p-6">
+                        <p class="mb-4 text-sm text-muted-foreground">
+                            Konfiguriere Tarife und Stripe Price IDs (monatlich/jährlich).
+                        </p>
+                        <Link href="/admin/plans">
+                            <Button variant="outline">
+                                <Package class="mr-2 h-4 w-4" />
+                                Tarife verwalten
                                 <ArrowRight class="ml-2 h-4 w-4" />
                             </Button>
                         </Link>

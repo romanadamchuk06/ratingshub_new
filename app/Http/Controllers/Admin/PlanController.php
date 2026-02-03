@@ -10,22 +10,20 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * PLAN-MANAGEMENT CONTROLLER
- * ==========================
+ * PLAN-MANAGEMENT CONTROLLER (VEREINFACHT)
+ * =========================================
  *
- * Verwaltet Subscription-Pläne im Admin-Panel:
+ * Verwaltet Subscription-Pläne im Admin-Panel.
  *
- * Features:
- * - Pläne erstellen, bearbeiten, löschen
- * - Preise ändern
- * - Features verwalten (JSON-Array)
- * - Pläne aktivieren/deaktivieren
- * - Sortierung ändern
+ * STRUKTUR:
+ * - Ein Plan hat ZWEI Stripe Price IDs (monatlich + jährlich)
+ * - Preise werden in Stripe verwaltet, hier nur IDs hinterlegen
+ * - Features als JSON-Array
  *
- * WICHTIG:
- * - stripe_plan_id muss mit Stripe-Price übereinstimmen
- * - Löschen nur wenn keine User den Plan haben
- * - Free-Plan sollte nicht gelöscht werden (System-Fallback)
+ * BEISPIEL:
+ * - Pro Plan:
+ *   - stripe_price_id_monthly = price_xxx (14,99€)
+ *   - stripe_price_id_yearly = price_yyy (149,99€)
  */
 class PlanController extends Controller
 {
@@ -122,77 +120,54 @@ class PlanController extends Controller
 
     /**
      * Update plan
+     *
+     * Aktualisiert Plan mit zwei Stripe Price IDs (monatlich + jährlich)
      */
     public function update(Request $request, Plan $plan)
     {
-        // DEBUGGING: Log incoming request
-        \Log::info('Plan Update Request', [
-            'plan_id' => $plan->id,
-            'request_data' => $request->all()
-        ]);
-
-        // Validation
-        // billing_interval wird nicht mehr benötigt - Stripe Checkout handhabt die Auswahl
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'slug' => 'required|string|max:255|regex:/^[a-z0-9-]+$/|unique:plans,slug,' . $plan->id,
-            'stripe_plan_id' => 'nullable|string|max:255',
+            // Stripe Price IDs (monatlich und jährlich)
+            'stripe_price_id_monthly' => 'nullable|string|max:255',
+            'stripe_price_id_yearly' => 'nullable|string|max:255',
+            // Preise (für Anzeige)
             'price' => 'required|numeric|min:0|max:9999.99',
+            'price_yearly' => 'nullable|numeric|min:0|max:99999.99',
+            // Limits & Features
             'max_platforms' => 'required|integer|min:1|max:1000',
             'description' => 'nullable|string',
             'features' => 'nullable|array',
             'features.*' => 'string|max:255',
+            // Status
             'is_active' => 'nullable|boolean',
             'is_popular' => 'nullable|boolean',
             'sort_order' => 'nullable|integer|min:0|max:100',
         ]);
 
         // Leere Strings zu null konvertieren
-        if (isset($validated['stripe_plan_id']) && trim($validated['stripe_plan_id']) === '') {
-            $validated['stripe_plan_id'] = null;
-        }
-
-        // Stripe Plan ID Warnung (nur warnen, nicht blockieren)
-        // Für Testzwecke können wir auch ohne Stripe ID arbeiten
-        if ($validated['price'] > 0 && empty($validated['stripe_plan_id'])) {
-            \Log::warning('Plan ohne Stripe ID gespeichert', [
-                'plan_id' => $plan->id,
-                'price' => $validated['price']
-            ]);
+        foreach (['stripe_price_id_monthly', 'stripe_price_id_yearly', 'description'] as $field) {
+            if (isset($validated[$field]) && trim($validated[$field]) === '') {
+                $validated[$field] = null;
+            }
         }
 
         // Boolean Werte explizit casten
-        $validated['is_active'] = isset($validated['is_active']) ? (bool) $validated['is_active'] : false;
-        $validated['is_popular'] = isset($validated['is_popular']) ? (bool) $validated['is_popular'] : false;
+        $validated['is_active'] = isset($validated['is_active']) ? (bool) $validated['is_active'] : $plan->is_active;
+        $validated['is_popular'] = isset($validated['is_popular']) ? (bool) $validated['is_popular'] : $plan->is_popular;
 
         try {
-            // Alte Werte speichern für Changelog
             $oldValues = $plan->only(array_keys($validated));
-
-            // DEBUGGING: Log vor Update
-            \Log::info('Plan Update - Vor Speicherung', [
-                'plan_id' => $plan->id,
-                'old_values' => $oldValues,
-                'new_values' => $validated
-            ]);
-
             $plan->update($validated);
 
-            // DEBUGGING: Log nach Update
-            \Log::info('Plan Update - Nach Speicherung', [
-                'plan_id' => $plan->id,
-                'current_values' => $plan->fresh()->toArray()
-            ]);
-
-            // Änderungen berechnen
+            // Änderungen berechnen für Log
             $changes = [];
             foreach ($validated as $key => $newValue) {
-                if ($oldValues[$key] != $newValue) {
-                    $changes[$key] = ['old' => $oldValues[$key], 'new' => $newValue];
+                if (($oldValues[$key] ?? null) != $newValue) {
+                    $changes[$key] = ['old' => $oldValues[$key] ?? null, 'new' => $newValue];
                 }
             }
 
-            // LOG: Plan aktualisiert (nur wenn es Änderungen gab)
             if (!empty($changes)) {
                 PlanActivityLog::log(
                     performedBy: auth()->user(),
@@ -206,11 +181,6 @@ class PlanController extends Controller
             return redirect()->route('admin.plans.index')
                 ->with('success', "Plan '{$plan->name}' wurde aktualisiert.");
         } catch (\Exception $e) {
-            \Log::error('Plan Update Fehler', [
-                'plan_id' => $plan->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
             return back()->with('error', 'Fehler beim Aktualisieren: ' . $e->getMessage());
         }
     }

@@ -23,9 +23,16 @@
  */
 
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-vue-next';
 import { onMounted, onUnmounted, ref, computed } from 'vue';
+
+// Flash Messages aus Session (z.B. "Abo nicht mehr aktiv")
+const page = usePage();
+const flashError = computed(() => page.props.flash?.error);
+const flashSuccess = computed(() => page.props.flash?.success);
 
 const props = defineProps({
     // Light Mode Pricing Table ID
@@ -114,6 +121,17 @@ onUnmounted(() => {
         { label: 'Subscription', href: '/subscription' }
     ]">
         <div class="space-y-8 p-4 md:p-6 lg:p-8">
+            <!-- Flash Message: Abo nicht aktiv -->
+            <Alert v-if="flashError" variant="destructive" class="mx-auto max-w-2xl">
+                <AlertCircle class="h-4 w-4" />
+                <AlertDescription>{{ flashError }}</AlertDescription>
+            </Alert>
+
+            <!-- Flash Message: Erfolg -->
+            <Alert v-if="flashSuccess" class="mx-auto max-w-2xl border-green-500 bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">
+                <AlertDescription>{{ flashSuccess }}</AlertDescription>
+            </Alert>
+
             <!-- Header -->
             <div class="text-center">
                 <h1 class="mb-4 text-3xl font-bold tracking-tight md:text-4xl">

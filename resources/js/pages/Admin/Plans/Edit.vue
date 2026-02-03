@@ -3,16 +3,9 @@
  * ADMIN PLAN EDIT
  * ================
  *
- * Formular zum Bearbeiten bestehender Subscription-Pläne
- *
- * WICHTIG FÜR STRIPE INTEGRATION:
- * - Die Stripe Price ID sollte normalerweise NICHT geändert werden
- * - Preis und Intervall MÜSSEN mit Stripe übereinstimmen
- * - Änderungen hier wirken sich NUR auf die Anzeige aus, nicht auf Stripe
- *
- * WARNUNGEN:
- * - Wenn User den Plan nutzen, Warnung anzeigen
- * - Bei Stripe-Feldern: Hinweis dass Stripe unabhängig ist
+ * Bearbeitet Tarif mit zwei Stripe Price IDs:
+ * - stripe_price_id_monthly
+ * - stripe_price_id_yearly
  */
 
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -20,17 +13,11 @@ import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { ArrowLeft, Plus, X, AlertCircle, CheckCircle2, ExternalLink } from 'lucide-vue-next';
+import { ExternalLink, Save, ArrowLeft, AlertCircle, Info, CheckCircle2, Plus, X } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps({
@@ -40,62 +27,52 @@ const props = defineProps({
     },
 });
 
-// Flash-Messages vom Server (success/error)
+// Flash Messages
 const page = usePage();
 const flashSuccess = computed(() => page.props.flash?.success);
 const flashError = computed(() => page.props.flash?.error);
 
-// Form mit bestehenden Daten vorausfüllen
 const form = useForm({
     name: props.plan.name,
     slug: props.plan.slug,
-    stripe_plan_id: props.plan.stripe_plan_id || '',
-    price: props.plan.price,
-    max_platforms: props.plan.max_platforms,
+    // Stripe Price IDs (NEU: zwei separate IDs)
+    stripe_price_id_monthly: props.plan.stripe_price_id_monthly || '',
+    stripe_price_id_yearly: props.plan.stripe_price_id_yearly || '',
+    // Preise (für Anzeige)
+    price: props.plan.price || '0.00',
+    price_yearly: props.plan.price_yearly || '',
+    // Limits
+    max_platforms: props.plan.max_platforms || 1,
+    // Description & Features
     description: props.plan.description || '',
     features: Array.isArray(props.plan.features) && props.plan.features.length > 0
         ? props.plan.features
-        : (props.plan.features && typeof props.plan.features === 'object'
-            ? Object.values(props.plan.features)
-            : ['']),
+        : [''],
+    // Status
     is_active: !!props.plan.is_active,
     is_popular: !!props.plan.is_popular,
-    sort_order: props.plan.sort_order || 10,
+    sort_order: props.plan.sort_order || 0,
 });
 
 // Prüft ob Plan bezahlt ist
-const isPaidPlan = computed(() => {
-    return parseFloat(form.price) > 0;
-});
+const isPaidPlan = computed(() => parseFloat(form.price) > 0);
 
-/**
- * Feature hinzufügen
- */
+const submit = () => {
+    // Leere Features filtern
+    form.features = form.features.filter(f => f && f.trim() !== '');
+    form.patch(`/admin/plans/${props.plan.id}`, {
+        preserveScroll: true,
+    });
+};
+
+// Feature hinzufügen
 const addFeature = () => {
     form.features.push('');
 };
 
-/**
- * Feature entfernen
- */
+// Feature entfernen
 const removeFeature = (index) => {
     form.features.splice(index, 1);
-};
-
-/**
- * Form absenden
- */
-const submit = () => {
-    form.features = form.features.filter((f) => f && f.trim() !== '');
-    form.price = parseFloat(form.price);
-    form.max_platforms = parseInt(form.max_platforms);
-    form.sort_order = parseInt(form.sort_order);
-    form.is_active = !!form.is_active;
-    form.is_popular = !!form.is_popular;
-
-    form.patch(`/admin/plans/${props.plan.id}`, {
-        preserveScroll: true,
-    });
 };
 </script>
 
@@ -104,187 +81,209 @@ const submit = () => {
 
     <AppLayout :breadcrumbs="[
         { label: 'Admin', href: '/admin' },
-        { label: 'Pläne', href: '/admin/plans' },
-        { label: plan.name, href: `/admin/plans/${plan.id}/edit` }
+        { label: 'Tarife', href: '/admin/plans' },
+        { label: plan.name }
     ]">
         <div class="space-y-6 p-4 md:p-6 lg:p-8">
             <!-- Header -->
-            <div class="flex items-center gap-4">
-                <Link href="/admin/plans">
-                    <Button variant="ghost" size="icon">
-                        <ArrowLeft class="h-4 w-4" />
-                    </Button>
-                </Link>
-                <div>
-                    <h1 class="text-2xl font-bold tracking-tight md:text-3xl">
-                        {{ plan.name }} bearbeiten
-                    </h1>
-                    <p class="text-muted-foreground">
-                        Ändere die Eigenschaften dieses Plans
-                    </p>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <Link href="/admin/plans">
+                        <Button variant="ghost" size="icon">
+                            <ArrowLeft class="h-4 w-4" />
+                        </Button>
+                    </Link>
+                    <div>
+                        <h1 class="text-2xl font-bold tracking-tight md:text-3xl">{{ plan.name }} bearbeiten</h1>
+                        <p class="text-muted-foreground">
+                            Konfiguriere Stripe Price IDs und Limits
+                        </p>
+                    </div>
                 </div>
+                <a
+                    href="https://dashboard.stripe.com/products"
+                    target="_blank"
+                >
+                    <Button variant="outline">
+                        <ExternalLink class="mr-2 h-4 w-4" />
+                        Stripe Dashboard
+                    </Button>
+                </a>
             </div>
 
-            <!-- SUCCESS-MESSAGE -->
+            <!-- Success Message -->
             <Alert v-if="flashSuccess" variant="default" class="border-green-500 bg-green-50 dark:bg-green-950">
-                <CheckCircle2 class="h-4 w-4 text-green-600 dark:text-green-400" />
+                <CheckCircle2 class="h-4 w-4 text-green-600" />
                 <AlertTitle class="text-green-800 dark:text-green-200">Erfolg</AlertTitle>
                 <AlertDescription class="text-green-700 dark:text-green-300">
                     {{ flashSuccess }}
                 </AlertDescription>
             </Alert>
 
-            <!-- ERROR-MESSAGE -->
+            <!-- Error Message -->
             <Alert v-if="flashError" variant="destructive">
                 <AlertCircle class="h-4 w-4" />
                 <AlertTitle>Fehler</AlertTitle>
+                <AlertDescription>{{ flashError }}</AlertDescription>
+            </Alert>
+
+            <!-- User Warning -->
+            <Alert v-if="plan.users_count > 0" variant="default">
+                <AlertCircle class="h-4 w-4" />
+                <AlertTitle>{{ plan.users_count }} Benutzer verwenden diesen Tarif</AlertTitle>
                 <AlertDescription>
-                    {{ flashError }}
+                    Änderungen an Limits wirken sich auf alle Benutzer aus.
                 </AlertDescription>
             </Alert>
 
-            <!-- Warnung: User nutzen diesen Plan -->
-            <Alert v-if="plan.users_count > 0" variant="default">
-                <AlertCircle class="h-4 w-4" />
-                <AlertTitle>{{ plan.users_count }} Benutzer verwenden diesen Plan</AlertTitle>
+            <!-- Info Alert -->
+            <Alert>
+                <Info class="h-4 w-4" />
                 <AlertDescription>
-                    Änderungen an Preis oder Features betreffen nur <strong>neue</strong> Subscriptions.
-                    Bestehende Abos bleiben bei ihren aktuellen Stripe-Konditionen.
+                    Die <strong>Stripe Price IDs</strong> findest du im Stripe Dashboard unter Produkte → Preise.
+                    Sie beginnen mit <code class="bg-muted px-1 rounded">price_</code>.
                 </AlertDescription>
             </Alert>
 
             <form @submit.prevent="submit" class="mx-auto max-w-2xl space-y-6">
+                <!-- Grunddaten -->
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Grunddaten</CardTitle>
+                        <CardDescription>Name und Slug des Tarifs</CardDescription>
+                    </CardHeader>
+                    <CardContent class="space-y-4">
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div class="space-y-2">
+                                <Label for="name">Name *</Label>
+                                <Input
+                                    id="name"
+                                    v-model="form.name"
+                                    placeholder="z.B. Pro"
+                                    :class="{ 'border-destructive': form.errors.name }"
+                                    required
+                                />
+                                <p v-if="form.errors.name" class="text-sm text-destructive">
+                                    {{ form.errors.name }}
+                                </p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="slug">Slug *</Label>
+                                <Input
+                                    id="slug"
+                                    v-model="form.slug"
+                                    placeholder="z.B. pro"
+                                    :class="{ 'border-destructive': form.errors.slug }"
+                                    required
+                                />
+                                <p v-if="form.errors.slug" class="text-sm text-destructive">
+                                    {{ form.errors.slug }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="description">Beschreibung</Label>
+                            <Textarea
+                                id="description"
+                                v-model="form.description"
+                                placeholder="Kurze Beschreibung des Tarifs..."
+                                rows="3"
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <!-- Stripe Konfiguration -->
                 <Card>
                     <CardHeader>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <CardTitle>Stripe Konfiguration</CardTitle>
-                                <CardDescription>
-                                    Diese Werte MÜSSEN mit deinem Stripe-Preis übereinstimmen
-                                </CardDescription>
+                        <CardTitle>Stripe Konfiguration</CardTitle>
+                        <CardDescription>
+                            Stripe Price IDs für monatliche und jährliche Zahlung
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent class="space-y-6">
+                        <!-- Monatlich -->
+                        <div class="rounded-lg border p-4 space-y-4">
+                            <h4 class="font-medium">Monatliche Zahlung</h4>
+                            <div class="grid gap-4 md:grid-cols-2">
+                                <div class="space-y-2">
+                                    <Label for="price">Preis (€/Monat) *</Label>
+                                    <Input
+                                        id="price"
+                                        v-model="form.price"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        placeholder="14.99"
+                                        required
+                                    />
+                                    <p class="text-xs text-muted-foreground">
+                                        0 = Kostenloser Tarif
+                                    </p>
+                                </div>
+
+                                <div class="space-y-2">
+                                    <Label for="stripe_price_id_monthly">Stripe Price ID (Monatlich)</Label>
+                                    <Input
+                                        id="stripe_price_id_monthly"
+                                        v-model="form.stripe_price_id_monthly"
+                                        placeholder="price_1ABC..."
+                                        :class="{ 'border-destructive': form.errors.stripe_price_id_monthly }"
+                                    />
+                                    <p v-if="isPaidPlan && !form.stripe_price_id_monthly" class="text-xs text-amber-600">
+                                        Erforderlich für bezahlte Tarife
+                                    </p>
+                                </div>
                             </div>
-                            <a
-                                href="https://dashboard.stripe.com/products"
-                                target="_blank"
-                                class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                            >
-                                Stripe Dashboard
-                                <ExternalLink class="h-3 w-3" />
-                            </a>
-                        </div>
-                    </CardHeader>
-                    <CardContent class="space-y-4">
-                        <!-- Stripe Price ID -->
-                        <div class="space-y-2">
-                            <Label for="stripe_plan_id">
-                                Stripe Price ID
-                                <Badge v-if="isPaidPlan" variant="destructive" class="ml-2 text-xs">
-                                    Pflichtfeld
-                                </Badge>
-                            </Label>
-                            <Input
-                                id="stripe_plan_id"
-                                v-model="form.stripe_plan_id"
-                                placeholder="price_xxxxxxxxxxxxx"
-                                :required="isPaidPlan"
-                            />
-                            <p class="text-xs text-muted-foreground">
-                                ⚠️ Nur ändern wenn du eine NEUE Price ID in Stripe erstellt hast
-                            </p>
-                            <p v-if="form.errors.stripe_plan_id" class="text-sm text-destructive">
-                                {{ form.errors.stripe_plan_id }}
-                            </p>
                         </div>
 
-                        <!-- Preis -->
-                        <div class="space-y-2">
-                            <Label for="price">Preis (€)</Label>
-                            <Input
-                                id="price"
-                                v-model="form.price"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max="9999.99"
-                                required
-                            />
-                            <p class="text-xs text-muted-foreground">
-                                Zur Anzeige. MUSS mit dem Stripe-Preis übereinstimmen.
-                            </p>
-                            <p v-if="form.errors.price" class="text-sm text-destructive">
-                                {{ form.errors.price }}
-                            </p>
-                        </div>
+                        <!-- Jährlich -->
+                        <div class="rounded-lg border p-4 space-y-4">
+                            <h4 class="font-medium">Jährliche Zahlung (optional)</h4>
+                            <div class="grid gap-4 md:grid-cols-2">
+                                <div class="space-y-2">
+                                    <Label for="price_yearly">Preis (€/Jahr)</Label>
+                                    <Input
+                                        id="price_yearly"
+                                        v-model="form.price_yearly"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        placeholder="149.99"
+                                    />
+                                    <p class="text-xs text-muted-foreground">
+                                        Leer lassen wenn keine jährliche Option
+                                    </p>
+                                </div>
 
-                    </CardContent>
-                </Card>
-
-                <!-- Plan-Informationen -->
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Plan-Informationen</CardTitle>
-                        <CardDescription>
-                            Name, Slug und Beschreibung
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent class="space-y-4">
-                        <!-- Name -->
-                        <div class="space-y-2">
-                            <Label for="name">Plan-Name *</Label>
-                            <Input
-                                id="name"
-                                v-model="form.name"
-                                placeholder="z.B. Premium"
-                                required
-                            />
-                            <p v-if="form.errors.name" class="text-sm text-destructive">
-                                {{ form.errors.name }}
-                            </p>
-                        </div>
-
-                        <!-- Slug -->
-                        <div class="space-y-2">
-                            <Label for="slug">Slug *</Label>
-                            <Input
-                                id="slug"
-                                v-model="form.slug"
-                                placeholder="z.B. premium"
-                                required
-                            />
-                            <p class="text-xs text-muted-foreground">
-                                Eindeutige URL-ID (nur Kleinbuchstaben, Zahlen, Bindestriche)
-                            </p>
-                            <p v-if="form.errors.slug" class="text-sm text-destructive">
-                                {{ form.errors.slug }}
-                            </p>
-                        </div>
-
-                        <!-- Beschreibung -->
-                        <div class="space-y-2">
-                            <Label for="description">Beschreibung</Label>
-                            <Input
-                                id="description"
-                                v-model="form.description"
-                                placeholder="Kurze Beschreibung des Plans"
-                            />
-                            <p v-if="form.errors.description" class="text-sm text-destructive">
-                                {{ form.errors.description }}
-                            </p>
+                                <div class="space-y-2">
+                                    <Label for="stripe_price_id_yearly">Stripe Price ID (Jährlich)</Label>
+                                    <Input
+                                        id="stripe_price_id_yearly"
+                                        v-model="form.stripe_price_id_yearly"
+                                        placeholder="price_1XYZ..."
+                                        :class="{ 'border-destructive': form.errors.stripe_price_id_yearly }"
+                                    />
+                                    <p v-if="parseFloat(form.price_yearly) > 0 && !form.stripe_price_id_yearly" class="text-xs text-amber-600">
+                                        Erforderlich wenn Jahrespreis angegeben
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
 
-                <!-- Features & Limits -->
+                <!-- Limits & Features -->
                 <Card>
                     <CardHeader>
-                        <CardTitle>Features & Limits</CardTitle>
+                        <CardTitle>Limits & Features</CardTitle>
                         <CardDescription>
-                            Definiere die Funktionen und Limits
+                            Was der Tarif beinhaltet
                         </CardDescription>
                     </CardHeader>
                     <CardContent class="space-y-4">
-                        <!-- Max Plattformen -->
                         <div class="space-y-2">
                             <Label for="max_platforms">Max. Plattformen *</Label>
                             <Input
@@ -298,14 +297,11 @@ const submit = () => {
                             <p class="text-xs text-muted-foreground">
                                 1000 = Unbegrenzt
                             </p>
-                            <p v-if="form.errors.max_platforms" class="text-sm text-destructive">
-                                {{ form.errors.max_platforms }}
-                            </p>
                         </div>
 
-                        <!-- Features -->
+                        <!-- Features Liste -->
                         <div class="space-y-2">
-                            <Label>Features</Label>
+                            <Label>Features (für Anzeige)</Label>
                             <div class="space-y-2">
                                 <div
                                     v-for="(feature, index) in form.features"
@@ -314,7 +310,7 @@ const submit = () => {
                                 >
                                     <Input
                                         v-model="form.features[index]"
-                                        placeholder="z.B. Erweiterte Analytics"
+                                        placeholder="z.B. KI-Antwortvorschläge"
                                     />
                                     <Button
                                         type="button"
@@ -332,56 +328,40 @@ const submit = () => {
                                 variant="outline"
                                 size="sm"
                                 @click="addFeature"
-                                class="mt-2"
                             >
                                 <Plus class="mr-2 h-4 w-4" />
                                 Feature hinzufügen
                             </Button>
-                            <p v-if="form.errors.features" class="text-sm text-destructive">
-                                {{ form.errors.features }}
-                            </p>
                         </div>
                     </CardContent>
                 </Card>
 
-                <!-- Einstellungen -->
+                <!-- Status -->
                 <Card>
                     <CardHeader>
-                        <CardTitle>Einstellungen</CardTitle>
-                        <CardDescription>
-                            Status und Sortierung
-                        </CardDescription>
+                        <CardTitle>Status</CardTitle>
                     </CardHeader>
                     <CardContent class="space-y-4">
-                        <!-- Aktiv -->
                         <div class="flex items-center justify-between">
-                            <div class="space-y-0.5">
-                                <Label for="is_active">Plan aktiv</Label>
-                                <p class="text-xs text-muted-foreground">
-                                    Inaktive Pläne werden nicht auf der Pricing-Seite angezeigt
+                            <div>
+                                <Label>Aktiv</Label>
+                                <p class="text-sm text-muted-foreground">
+                                    Nur aktive Tarife werden angezeigt
                                 </p>
                             </div>
-                            <Switch
-                                id="is_active"
-                                v-model:checked="form.is_active"
-                            />
+                            <Switch v-model:checked="form.is_active" />
                         </div>
 
-                        <!-- Popular Badge -->
                         <div class="flex items-center justify-between">
-                            <div class="space-y-0.5">
-                                <Label for="is_popular">Als "Beliebt" markieren</Label>
-                                <p class="text-xs text-muted-foreground">
-                                    Zeigt "Beliebt"-Badge auf der Pricing-Seite
+                            <div>
+                                <Label>Als "Beliebt" markieren</Label>
+                                <p class="text-sm text-muted-foreground">
+                                    Zeigt ein Badge in der Pricing Table
                                 </p>
                             </div>
-                            <Switch
-                                id="is_popular"
-                                v-model:checked="form.is_popular"
-                            />
+                            <Switch v-model:checked="form.is_popular" />
                         </div>
 
-                        <!-- Sort Order -->
                         <div class="space-y-2">
                             <Label for="sort_order">Sortierung</Label>
                             <Input
@@ -390,26 +370,22 @@ const submit = () => {
                                 type="number"
                                 min="0"
                                 max="100"
+                                class="w-24"
                             />
-                            <p class="text-xs text-muted-foreground">
-                                Niedrigere Zahlen = weiter links/oben auf der Pricing-Seite
-                            </p>
-                            <p v-if="form.errors.sort_order" class="text-sm text-destructive">
-                                {{ form.errors.sort_order }}
-                            </p>
                         </div>
                     </CardContent>
                 </Card>
 
-                <!-- Actions -->
-                <div class="flex justify-end gap-3">
+                <!-- Submit -->
+                <div class="flex justify-end gap-2">
                     <Link href="/admin/plans">
                         <Button type="button" variant="outline">
                             Abbrechen
                         </Button>
                     </Link>
                     <Button type="submit" :disabled="form.processing">
-                        {{ form.processing ? 'Wird gespeichert...' : 'Änderungen speichern' }}
+                        <Save class="mr-2 h-4 w-4" />
+                        {{ form.processing ? 'Speichern...' : 'Speichern' }}
                     </Button>
                 </div>
             </form>
