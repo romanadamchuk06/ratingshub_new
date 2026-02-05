@@ -26,13 +26,20 @@ Route::post('/stripe/webhook', [App\Http\Controllers\StripeWebhookController::cl
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::get('/', function () {
+    // Pläne für Pricing Cards laden (nur aktive, sortiert)
+    // Inkl. price_yearly für monatlich/jährlich Toggle
+    $plans = \App\Models\Plan::where('is_active', true)
+        ->orderBy('sort_order')
+        ->get(['id', 'name', 'slug', 'price', 'price_yearly', 'description', 'features', 'max_platforms', 'is_popular']);
+
     return Inertia::render('WelcomeNew', [
         'canRegister' => Features::enabled(Features::registration()),
         'isAuthenticated' => auth()->check(),
-        // Stripe Pricing Table IDs (Light + Dark)
+        'plans' => $plans,
+        // Stripe Pricing Table IDs für Homepage
         'pricingTableId' => config('services.stripe.pricing_table_id'),
         'pricingTableIdDark' => config('services.stripe.pricing_table_id_dark'),
-        'publishableKey' => config('cashier.key'),
+        'stripePublishableKey' => config('cashier.key'),
     ]);
 })->name('home');
 
@@ -249,6 +256,10 @@ Route::middleware(['auth', 'verified'])->prefix('subscription')->name('subscript
     Route::post('/resume', [App\Http\Controllers\SubscriptionController::class, 'resume'])->name('resume');
     Route::get('/billing-portal', [App\Http\Controllers\SubscriptionController::class, 'billingPortal'])->name('billing-portal');
     Route::get('/invoice/{invoice}', [App\Http\Controllers\SubscriptionController::class, 'invoice'])->name('invoice');
+
+    // Direkter Checkout für einen Plan (von Landing Page)
+    // URL: /subscription/checkout/{plan}?interval=monthly|yearly
+    Route::get('/checkout/{plan}', [App\Http\Controllers\SubscriptionController::class, 'checkout'])->name('checkout');
 });
 
 // Bug Report Routes (für User)

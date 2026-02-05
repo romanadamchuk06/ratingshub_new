@@ -236,4 +236,86 @@ class SubscriptionController extends Controller
             'product' => 'Subscription',
         ]);
     }
+
+    /**
+     * Direct Checkout für einen spezifischen Plan.
+     *
+     * Erstellt eine Stripe Checkout Session und leitet direkt zu Stripe weiter.
+     * Wird verwendet wenn User von der Landing Page einen Plan wählt.
+     *
+     * @param string $planSlug Plan-Slug (z.B. 'professional')
+     * @param string $interval 'monthly' oder 'yearly' (default: monthly)
+     */
+    public function checkout(string $planSlug, Request $request)
+    {
+        $user = auth()->user();
+        $interval = $request->get('interval', 'monthly');
+
+        // Plan finden
+        $plan = Plan::where('slug', $planSlug)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$plan) {
+            return redirect()->route('subscription.index')
+                ->with('error', 'Plan nicht gefunden.');
+        }
+
+        // Kostenloser Plan: direkt zuweisen
+        if ($plan->isFree()) {
+            $user->update(['plan_id' => $plan->id]);
+            return redirect()->route('dashboard')
+                ->with('success', "Du nutzt jetzt den {$plan->name} Plan!");
+        }
+
+        // Stripe Price ID basierend auf Interval
+        $stripePriceId = $interval === 'yearly'
+            ? $plan->stripe_price_id_yearly
+            : $plan->stripe_price_id_monthly;
+
+        if (!$stripePriceId) {
+            return redirect()->route('subscription.index')
+                ->with('error', 'Dieser Plan ist für das gewählte Intervall nicht verfügbar.');
+        }
+
+        // Stripe Customer erstellen falls noch nicht vorhanden
+        if (!$user->stripe_id) {
+            try {
+                $user->createAsStripeCustomer();
+            } catch (\Exception $e) {
+                \Log::error('Stripe Customer konnte nicht erstellt werden: ' . $e->getMessage());
+                return redirect()->route('subscription.index')
+                    ->with('error', 'Fehler bei der Zahlungsvorbereitung. Bitte versuche es erneut.');
+            }
+        }
+
+        // Stripe Checkout Session erstellen
+        try {
+            Stripe::setApiKey(config('cashier.secret'));
+
+            $checkoutSession = StripeCheckoutSession::create([
+                'customer' => $user->stripe_id,
+                'mode' => 'subscription',
+                'line_items' => [[
+                    'price' => $stripePriceId,
+                    'quantity' => 1,
+                ]],
+                'success_url' => route('subscription.success') . '?session_id={CHECKOUT_SESSION_ID}',
+                'cancel_url' => route('subscription.index'),
+                'allow_promotion_codes' => true,
+                'billing_address_collection' => 'required',
+                'metadata' => [
+                    'user_id' => $user->id,
+                    'plan_id' => $plan->id,
+                ],
+            ]);
+
+            // Inertia::location() für externe Redirects (Stripe)
+            return \Inertia\Inertia::location($checkoutSession->url);
+        } catch (\Exception $e) {
+            \Log::error('Stripe Checkout Session konnte nicht erstellt werden: ' . $e->getMessage());
+            return redirect()->route('subscription.index')
+                ->with('error', 'Fehler beim Erstellen der Checkout-Session. Bitte versuche es erneut.');
+        }
+    }
 }

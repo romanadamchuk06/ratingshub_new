@@ -2,9 +2,13 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
+use App\Http\Responses\LoginResponse;
+use App\Http\Responses\RegisterResponse;
 use App\Models\Review;
 use App\Observers\ReviewObserver;
+use Illuminate\Support\ServiceProvider;
+use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
+use Laravel\Fortify\Contracts\RegisterResponse as RegisterResponseContract;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -13,7 +17,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Custom Responses für Redirect-Handling nach Login/Register
+        $this->app->singleton(LoginResponseContract::class, LoginResponse::class);
+        $this->app->singleton(RegisterResponseContract::class, RegisterResponse::class);
     }
 
     /**

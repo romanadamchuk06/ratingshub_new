@@ -47,11 +47,18 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureViews(): void
     {
-        Fortify::loginView(fn (Request $request) => Inertia::render('auth/Login', [
-            'canResetPassword' => Features::enabled(Features::resetPasswords()),
-            'canRegister' => Features::enabled(Features::registration()),
-            'status' => $request->session()->get('status'),
-        ]));
+        Fortify::loginView(function (Request $request) {
+            // Wenn ein redirect Parameter übergeben wurde, in Session speichern
+            if ($request->has('redirect')) {
+                session()->put('url.intended', $request->get('redirect'));
+            }
+
+            return Inertia::render('auth/Login', [
+                'canResetPassword' => Features::enabled(Features::resetPasswords()),
+                'canRegister' => Features::enabled(Features::registration()),
+                'status' => $request->session()->get('status'),
+            ]);
+        });
 
         Fortify::resetPasswordView(fn (Request $request) => Inertia::render('auth/ResetPassword', [
             'email' => $request->email,
@@ -66,7 +73,14 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(fn () => Inertia::render('auth/Register'));
+        Fortify::registerView(function (Request $request) {
+            // Wenn ein redirect Parameter übergeben wurde, in Session speichern
+            if ($request->has('redirect')) {
+                session()->put('url.intended', $request->get('redirect'));
+            }
+
+            return Inertia::render('auth/Register');
+        });
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/TwoFactorChallenge'));
 

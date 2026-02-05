@@ -11,7 +11,7 @@
  * - Footer
  */
 
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,26 +28,39 @@ import {
     ChevronDown,
     Award,
     TrendingUp,
-    MapPin
+    MapPin,
+    Check,
+    Lock
 } from 'lucide-vue-next';
 
 const props = defineProps({
     canRegister: Boolean,
     isAuthenticated: Boolean,
-    // Stripe Pricing Table IDs
+    plans: {
+        type: Array,
+        default: () => [],
+    },
+    // Stripe Pricing Table
     pricingTableId: String,
     pricingTableIdDark: String,
-    publishableKey: String,
+    stripePublishableKey: String,
 });
 
-// Dark Mode Erkennung für Pricing Table
-const isDarkMode = ref(false);
-const pricingTableLoaded = ref(false);
+// Stripe Pricing Table laden
+const stripeLoaded = ref(false);
+const showLoginOverlay = ref(false);
 
+// Billing Interval Toggle (monthly/yearly)
+const billingInterval = ref('monthly');
+const isYearly = computed(() => billingInterval.value === 'yearly');
+
+// Dark Mode Erkennung
+const isDarkMode = ref(false);
 const updateDarkMode = () => {
     isDarkMode.value = document.documentElement.classList.contains('dark');
 };
 
+// Aktive Pricing Table ID basierend auf Theme
 const activePricingTableId = computed(() => {
     if (isDarkMode.value && props.pricingTableIdDark) {
         return props.pricingTableIdDark;
@@ -74,17 +87,15 @@ onMounted(() => {
         attributeFilter: ['class'],
     });
 
-    // Stripe Pricing Table Script laden
-    if (!document.querySelector('script[src*="pricing-table.js"]')) {
+    // Stripe Script laden
+    if (props.pricingTableId) {
         const script = document.createElement('script');
         script.src = 'https://js.stripe.com/v3/pricing-table.js';
         script.async = true;
         script.onload = () => {
-            pricingTableLoaded.value = true;
+            stripeLoaded.value = true;
         };
         document.head.appendChild(script);
-    } else {
-        pricingTableLoaded.value = true;
     }
 });
 
@@ -93,6 +104,54 @@ onUnmounted(() => {
         observer.disconnect();
     }
 });
+
+// Klick auf Pricing Table abfangen wenn nicht eingeloggt
+const handlePricingClick = () => {
+    if (!props.isAuthenticated) {
+        showLoginOverlay.value = true;
+    }
+};
+
+// Zum Login mit Redirect
+const goToLogin = () => {
+    router.visit('/login?redirect=/subscription');
+};
+
+// Zum Registrieren mit Redirect
+const goToRegister = () => {
+    router.visit('/register?redirect=/subscription');
+};
+
+// Preis formatieren
+const formatPrice = (price) => {
+    if (!price || price == 0) return 'Kostenlos';
+    return `${Number(price).toFixed(2).replace('.', ',')} €`;
+};
+
+// Plan auswählen - redirect zu Login wenn nicht eingeloggt
+// Nach Login geht's direkt zum Stripe Checkout für diesen Plan
+const selectPlan = (plan) => {
+    console.log('selectPlan called:', plan, 'interval:', billingInterval.value);
+
+    if (!plan.slug) {
+        console.error('Plan hat keinen slug!', plan);
+        // Fallback: zur allgemeinen Subscription-Seite
+        router.visit('/subscription');
+        return;
+    }
+
+    // Checkout URL mit Billing Interval
+    const checkoutUrl = `/subscription/checkout/${plan.slug}?interval=${billingInterval.value}`;
+    console.log('Redirect to:', checkoutUrl);
+
+    if (props.isAuthenticated) {
+        // Eingeloggt: direkt zum Checkout für diesen Plan
+        router.visit(checkoutUrl);
+    } else {
+        // Nicht eingeloggt: zu Login mit Redirect zum Checkout
+        router.visit(`/login?redirect=${encodeURIComponent(checkoutUrl)}`);
+    }
+};
 
 // Features Liste
 const features = [
@@ -244,14 +303,12 @@ const toggleFaq = (index) => {
                     </p>
 
                     <div class="flex flex-col sm:flex-row gap-4">
-                        <Link href="/register">
-                            <Button size="lg" class="w-full sm:w-auto">
-                                Kostenlos testen
-                                <ArrowRight class="ml-2 h-4 w-4" />
-                            </Button>
-                        </Link>
-                        <Button @click="scrollToSection('pricing')" size="lg" variant="outline" class="w-full sm:w-auto">
-                            Preise ansehen
+                        <Button @click="scrollToSection('pricing')" size="lg" class="w-full sm:w-auto">
+                            Kostenlos testen
+                            <ArrowRight class="ml-2 h-4 w-4" />
+                        </Button>
+                        <Button @click="scrollToSection('features')" size="lg" variant="outline" class="w-full sm:w-auto">
+                            Features ansehen
                         </Button>
                     </div>
 
@@ -502,31 +559,133 @@ const toggleFaq = (index) => {
                     Transparent & Fair
                 </h2>
                 <p class="text-lg text-muted-foreground max-w-2xl mx-auto">
-                    Wähle den Plan, der zu deinem Unternehmen passt. Monatlich kündbar.
+                    Wähle den Plan, der zu deinem Unternehmen passt. Jederzeit kündbar.
                 </p>
             </div>
 
-            <!-- Stripe Pricing Table -->
-            <div class="max-w-5xl mx-auto">
-                <!-- Loading State -->
-                <div v-if="!pricingTableLoaded" class="flex items-center justify-center py-20">
-                    <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-                </div>
+            <!-- Stripe Pricing Table für alle -->
+            <div class="mx-auto max-w-5xl relative">
 
-                <!-- Stripe Pricing Table Component -->
-                <stripe-pricing-table
-                    v-if="pricingTableId"
-                    v-show="pricingTableLoaded"
-                    :key="activePricingTableId"
-                    :pricing-table-id="activePricingTableId"
-                    :publishable-key="publishableKey"
-                />
+                <!-- Stripe Pricing Table -->
+                <template v-if="pricingTableId">
+                    <!-- Loading State -->
+                    <div v-if="!stripeLoaded" class="flex items-center justify-center py-20">
+                        <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                    </div>
+
+                    <div class="relative">
+                        <stripe-pricing-table
+                            v-show="stripeLoaded"
+                            :key="activePricingTableId"
+                            :pricing-table-id="activePricingTableId"
+                            :publishable-key="stripePublishableKey"
+                        />
+
+                        <!-- Overlay NUR auf Button-Bereich (untere 25%) wenn NICHT eingeloggt -->
+                        <div
+                            v-if="!isAuthenticated && stripeLoaded"
+                            @click="handlePricingClick"
+                            class="absolute bottom-0 left-0 right-0 z-10 cursor-pointer"
+                            style="height: 80px; background: transparent;"
+                        ></div>
+                    </div>
+                </template>
+
+                <!-- Fallback: Custom Cards wenn keine Stripe Table ID -->
+                <div v-else class="grid md:grid-cols-3 gap-8">
+                    <Card
+                        v-for="plan in plans"
+                        :key="plan.id"
+                        :class="[
+                            'relative flex flex-col',
+                            plan.is_popular ? 'border-primary shadow-lg scale-105' : ''
+                        ]"
+                    >
+                        <div v-if="plan.is_popular" class="absolute -top-3 left-1/2 -translate-x-1/2">
+                            <Badge class="bg-primary text-primary-foreground">Beliebt</Badge>
+                        </div>
+                        <CardHeader class="text-center pb-2">
+                            <CardTitle class="text-xl">{{ plan.name }}</CardTitle>
+                            <CardDescription>{{ plan.description }}</CardDescription>
+                        </CardHeader>
+                        <CardContent class="flex-1 flex flex-col">
+                            <!-- Preis: Monatlich oder Jährlich -->
+                            <div class="text-center mb-6">
+                                <template v-if="isYearly && plan.price_yearly">
+                                    <span class="text-4xl font-bold">{{ formatPrice(plan.price_yearly) }}</span>
+                                    <span class="text-muted-foreground">/Jahr</span>
+                                    <div class="text-sm text-green-600 dark:text-green-400 mt-1">
+                                        Spare {{ Math.round((1 - plan.price_yearly / (plan.price * 12)) * 100) }}%
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <span class="text-4xl font-bold">{{ formatPrice(plan.price) }}</span>
+                                    <span v-if="plan.price > 0" class="text-muted-foreground">/Monat</span>
+                                </template>
+                            </div>
+                            <ul class="space-y-3 mb-6 flex-1">
+                                <li class="flex items-start gap-2">
+                                    <Check class="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                                    <span>{{ plan.max_platforms }} {{ plan.max_platforms === 1 ? 'Standort' : 'Standorte' }}</span>
+                                </li>
+                                <li v-for="feature in (plan.features || [])" :key="feature" class="flex items-start gap-2">
+                                    <Check class="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                                    <span>{{ feature }}</span>
+                                </li>
+                            </ul>
+                            <Button
+                                @click="selectPlan(plan)"
+                                :variant="plan.is_popular ? 'default' : 'outline'"
+                                class="w-full"
+                            >
+                                {{ plan.price > 0 ? 'Plan wählen' : 'Kostenlos starten' }}
+                                <ArrowRight class="ml-2 h-4 w-4" />
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
 
             <p class="text-center text-sm text-muted-foreground mt-8">
                 Alle Preise zzgl. MwSt. • Jederzeit kündbar
             </p>
         </section>
+
+        <!-- Login Overlay Modal -->
+        <Teleport to="body">
+            <div
+                v-if="showLoginOverlay"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+                @click.self="showLoginOverlay = false"
+            >
+                <Card class="w-full max-w-md mx-4 shadow-2xl">
+                    <CardHeader class="text-center">
+                        <div class="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                            <Lock class="h-6 w-6 text-primary" />
+                        </div>
+                        <CardTitle class="text-xl">Anmeldung erforderlich</CardTitle>
+                        <CardDescription>
+                            Um einen Plan auszuwählen, melde dich bitte an oder erstelle ein kostenloses Konto.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent class="space-y-4">
+                        <Button @click="goToLogin" class="w-full" size="lg">
+                            Anmelden
+                            <ArrowRight class="ml-2 h-4 w-4" />
+                        </Button>
+                        <Button @click="goToRegister" variant="outline" class="w-full" size="lg">
+                            Kostenloses Konto erstellen
+                        </Button>
+                        <button
+                            @click="showLoginOverlay = false"
+                            class="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            Abbrechen
+                        </button>
+                    </CardContent>
+                </Card>
+            </div>
+        </Teleport>
 
         <!-- FAQ Section -->
         <section id="faq" class="container mx-auto px-4 py-20 md:py-32">
@@ -576,17 +735,10 @@ const toggleFaq = (index) => {
                         Starte jetzt kostenlos und verbessere deine Online-Reputation
                     </p>
                     <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                        <Link href="/register">
-                            <Button size="lg">
-                                Jetzt kostenlos testen
-                                <ArrowRight class="ml-2 h-4 w-4" />
-                            </Button>
-                        </Link>
-                        <Link href="/login">
-                            <Button size="lg" variant="outline">
-                                Anmelden
-                            </Button>
-                        </Link>
+                        <Button @click="scrollToSection('pricing')" size="lg">
+                            Tarife ansehen
+                            <ArrowRight class="ml-2 h-4 w-4" />
+                        </Button>
                     </div>
                 </CardContent>
                 <!-- Decorative gradient -->
