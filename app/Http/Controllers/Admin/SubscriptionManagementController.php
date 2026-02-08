@@ -189,7 +189,7 @@ class SubscriptionManagementController extends Controller
      */
     public function resumeSubscription(User $user)
     {
-        if (!$user->subscription('default')?->cancelled()) {
+        if (!$user->subscription('default')?->canceled()) {
             return back()->with('error', 'Benutzer hat keine gekündigte Subscription.');
         }
 

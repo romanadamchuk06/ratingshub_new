@@ -208,7 +208,7 @@ class SubscriptionController extends Controller
     {
         $user = auth()->user();
 
-        if ($user->subscription('default')?->cancelled()) {
+        if ($user->subscription('default')?->canceled()) {
             $subscription = $user->subscription('default');
             $subscription->resume();
 
