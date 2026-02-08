@@ -65,12 +65,12 @@ defineProps({
             </Link>
         </DropdownMenuItem>
 
-        <!-- Abo verwalten: Management-Seite für aktuelles Abo -->
+        <!-- Abo verwalten: Direkt zu Stripe Billing Portal -->
         <DropdownMenuItem :as-child="true">
-            <Link class="block w-full" href="/subscription/manage" as="button">
+            <a class="flex w-full items-center" href="/subscription/billing-portal">
                 <CreditCard class="mr-2 h-4 w-4" />
                 Abo verwalten
-            </Link>
+            </a>
         </DropdownMenuItem>
 
         <!-- Bug melden -->

@@ -164,9 +164,9 @@ onUnmounted(() => {
             <div v-if="currentPlan" class="mx-auto max-w-2xl rounded-lg border bg-muted/50 p-6 text-center">
                 <p class="text-sm text-muted-foreground">
                     Du nutzt aktuell den <strong>{{ currentPlan.name }}</strong> Plan.
-                    <Link href="/subscription/manage" class="text-primary hover:underline">
+                    <a href="/subscription/billing-portal" class="text-primary hover:underline">
                         Subscription verwalten
-                    </Link>
+                    </a>
                 </p>
             </div>
 

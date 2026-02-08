@@ -55,11 +55,11 @@ import { CheckCircle2, ArrowRight } from 'lucide-vue-next';
                             <ArrowRight class="ml-2 h-4 w-4" />
                         </Button>
                     </Link>
-                    <Link href="/subscription/manage">
+                    <a href="/subscription/billing-portal">
                         <Button variant="outline">
                             Subscription verwalten
                         </Button>
-                    </Link>
+                    </a>
                 </CardFooter>
             </Card>
         </div>
