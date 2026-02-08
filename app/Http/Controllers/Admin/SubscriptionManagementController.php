@@ -90,7 +90,7 @@ class SubscriptionManagementController extends Controller
             'cancelledSubscriptions' => User::whereHas('subscriptions', function ($q) {
                 $q->where('type', 'default')->whereNotNull('ends_at');
             })->count(),
-            'freeUsers' => User::whereDoesntHave('subscriptions', function ($q) {
+            'usersWithoutSubscription' => User::whereDoesntHave('subscriptions', function ($q) {
                 $q->where('type', 'default');
             })->count(),
             // Anzahl User pro Plan (nützlicher als ungenaue Revenue-Berechnung)
@@ -214,13 +214,10 @@ class SubscriptionManagementController extends Controller
         try {
             $user->subscription('default')->cancelNow();
 
-            // Set to free plan
-            $freePlan = Plan::where('slug', 'free')->first();
-            if ($freePlan) {
-                $user->update(['plan_id' => $freePlan->id]);
-            }
+            // Plan entfernen - User hat keinen Zugriff mehr
+            $user->update(['plan_id' => null]);
 
-            return back()->with('success', "Subscription für {$user->name} wurde sofort beendet.");
+            return back()->with('success', "Subscription für {$user->name} wurde sofort beendet. User hat keinen Zugriff mehr.");
         } catch (\Exception $e) {
             return back()->with('error', 'Fehler beim Beenden: ' . $e->getMessage());
         }

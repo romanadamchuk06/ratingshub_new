@@ -159,10 +159,15 @@ class SubscriptionController extends Controller
         $user = auth()->user();
 
         if (!$user->stripe_id) {
-            return back()->with('error', 'Kein Stripe-Konto vorhanden.');
+            return redirect()->route('subscription.index')
+                ->with('error', 'Kein Stripe-Konto vorhanden. Bitte wähle zuerst einen Plan.');
         }
 
-        return $user->redirectToBillingPortal(route('subscription.manage'));
+        // Billing Portal URL generieren (mit Rückkehr zum Dashboard)
+        $billingPortalUrl = $user->billingPortalUrl(route('dashboard'));
+
+        // Inertia::location() für externe Redirects
+        return \Inertia\Inertia::location($billingPortalUrl);
     }
 
     /**

@@ -200,7 +200,7 @@ class StripeWebhookController extends CashierController
      * - Abo wegen Zahlungsausfall endet
      * - Grace Period abgelaufen ist
      *
-     * WICHTIG: User wird auf Free Plan zurückgesetzt!
+     * WICHTIG: User verliert Zugriff (plan_id = null)!
      */
     public function handleCustomerSubscriptionDeleted(array $payload)
     {
